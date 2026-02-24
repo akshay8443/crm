@@ -231,12 +231,18 @@
 // }
 
 import 'dart:io';
+import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../model/contract_data.dart';
+import '../model/employee_data.dart';
+import '../model/problem_sub_type_data.dart';
+import '../model/problem_type_data.dart';
+import '../model/project_data.dart';
 import '../model/service_call_request.dart';
 import '../viewmodel/service_call_viewmodel.dart';
 
@@ -248,22 +254,48 @@ class ServiceTypeScreen extends StatefulWidget {
 }
 
 class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
+  static const String _selectCustomerCode = "Select Customer Code";
+  static const String _selectCustomerName = "Select Customer Name";
+  static const String _selectPhone = "Select Phone";
+  static const String _selectEmail = "Select Email";
+  static const String _selectContractNo = "Select Contract No.";
+  static const String _selectProject = "Select Project";
+  static const String _selectAttendBy = "Select Attend By";
+  static const String _selectItemCode = "Select Item Code";
+  static const String _selectMfrSerialNo = "Select MFR Serial Number";
+  static const String _selectSerialNumber = "Select Serial Number";
+  static const String _selectProblemType = "Select Problem Type";
+  static const String _selectProblemSubType = "Select ProblemSub Type";
+
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _imagePicker = ImagePicker();
   final ServiceCallViewModel _serviceCallViewModel = ServiceCallViewModel();
+  bool _hasRequestedInitialMasterData = false;
   bool _isSubmitting = false;
+  bool _showValidationErrors = false;
+  bool _isContractDataLoading = false;
+  bool _isProjectDataLoading = false;
+  bool _isEmployeeDataLoading = false;
+  bool _isProblemTypeDataLoading = false;
+  bool _isProblemSubTypeDataLoading = false;
+  bool _isServiceNoLoading = false;
+  String? _contractLoadError;
+  String? _projectLoadError;
+  String? _employeeLoadError;
+  String? _problemTypeLoadError;
+  String? _problemSubTypeLoadError;
 
   // ---------------- Controllers ----------------
-  final customerCodeCtrl = TextEditingController();
   final customerNameCtrl = TextEditingController();
   final phoneCtrl = TextEditingController();
   final emailCtrl = TextEditingController();
-  final projectCtrl = TextEditingController();
   final expenseCtrl = TextEditingController();
   final tourLocationCtrl = TextEditingController();
-  final serviceNoCtrl = TextEditingController(text: "SC-000011");
+  final serviceNoCtrl = TextEditingController();
   final createdCtrl = TextEditingController();
   final closedDateCtrl = TextEditingController();
+  final tourStartDateCtrl = TextEditingController();
+  final tourEndDateCtrl = TextEditingController();
   final remarksCtrl = TextEditingController();
   final subjectCtrl = TextEditingController();
 
@@ -274,56 +306,482 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
   final List<XFile> _attachments = [];
 
   // ---------------- Dropdown Values ----------------
-  String ticketStatus = "Open";
-  String priority = "Medium";
-  String? assignedTech;
+  String ticketStatus = "Select Status";
+  String priority = "Select Priority";
+  String customerCode = _selectCustomerCode;
+  String customerName = _selectCustomerName;
+  String phone = _selectPhone;
+  String email = _selectEmail;
+  String contractNo = _selectContractNo;
+  String selectedProject = _selectProject;
+  String assignedTech = _selectAttendBy;
   String department = "select Department";
   String serviceType = "select ServiceType";
   String originType = "Select";
   String callType = "Select Call Type";
   String chargeable = "Select";
-  String jobSheet = "No";
+  String jobSheet = "Select";
   String tourClaim = "No";
-  String? contractNo;
+  final List<ContractData> _contractData = <ContractData>[];
+  final List<ProjectData> _projectData = <ProjectData>[];
+  final List<EmployeeData> _employeeData = <EmployeeData>[];
+  final List<ProblemTypeData> _problemTypeData = <ProblemTypeData>[];
+  final List<ProblemSubTypeData> _problemSubTypeData = <ProblemSubTypeData>[];
 
-  String problemType = "Select Problem Type";
-  String problemSubType = "Select ProblemSub Type";
+  String problemType = _selectProblemType;
+  String problemSubType = _selectProblemSubType;
   String repairAssessment = "Select";
-  String? itemCode;
-  String? mfrSerialNumber;
-  String? serialNumber;
+  String itemCode = _selectItemCode;
+  String mfrSerialNumber = _selectMfrSerialNo;
+  String serialNumber = _selectSerialNumber;
 
   @override
   void initState() {
     super.initState();
+    print('SERVICE TYPE SCREEN initState');
     createdCtrl.text = _formatDate(DateTime.now());
+    _syncCustomerTextControllers();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _hasRequestedInitialMasterData) return;
+      _hasRequestedInitialMasterData = true;
+      print('SERVICE TYPE SCREEN initial master-data load');
+      _reloadMasterData();
+    });
+  }
+
+  Future<void> _reloadMasterData() async {
+    print('SERVICE TYPE SCREEN reload master-data start');
+    await Future.wait(<Future<void>>[
+      _loadContractData(),
+      _loadProjectData(),
+      _loadEmployeeData(),
+      _loadProblemTypeData(),
+      _loadProblemSubTypeData(),
+      _loadNextServiceNo(),
+    ]);
+    print('SERVICE TYPE SCREEN reload master-data completed');
+  }
+
+  Future<void> _loadNextServiceNo() async {
+    setState(() {
+      _isServiceNoLoading = true;
+    });
+    try {
+      final nextServiceNo = await _serviceCallViewModel.fetchNextServiceNo();
+      if (!mounted) return;
+      setState(() {
+        serviceNoCtrl.text = nextServiceNo;
+      });
+    } catch (e) {
+      print('SERVICE TYPE SCREEN next service no error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isServiceNoLoading = false;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
-    customerCodeCtrl.dispose();
     customerNameCtrl.dispose();
     phoneCtrl.dispose();
     emailCtrl.dispose();
-    projectCtrl.dispose();
     expenseCtrl.dispose();
     tourLocationCtrl.dispose();
     serviceNoCtrl.dispose();
     createdCtrl.dispose();
     closedDateCtrl.dispose();
+    tourStartDateCtrl.dispose();
+    tourEndDateCtrl.dispose();
     remarksCtrl.dispose();
     subjectCtrl.dispose();
     super.dispose();
   }
 
+  List<String> _buildOptions(Iterable<String> source, String placeholder) {
+    final values = LinkedHashSet<String>.from(
+      source.map((value) => value.trim()).where((value) => value.isNotEmpty),
+    ).toList();
+    values.sort((a, b) => a.compareTo(b));
+    return <String>[placeholder, ...values];
+  }
+
+  List<ContractData> get _selectedCustomerContracts {
+    final selectedCode = _customerCodeFromSelection(customerCode);
+    if (selectedCode.isEmpty) return const <ContractData>[];
+    return _contractData
+        .where((row) => row.businessPartnerCode.trim() == selectedCode)
+        .toList();
+  }
+
+  String _customerCodeLabel(String code, String name) {
+    if (name.trim().isEmpty) return code.trim();
+    return '${code.trim()} - ${name.trim()}';
+  }
+
+  List<MapEntry<String, String>> get _customerCodeOptions {
+    final byCode = <String, String>{};
+    for (final row in _contractData) {
+      final code = row.businessPartnerCode.trim();
+      if (code.isEmpty) continue;
+      final name = row.businessPartnerName.trim();
+      byCode.putIfAbsent(code, () => name);
+      if (byCode[code]!.isEmpty && name.isNotEmpty) {
+        byCode[code] = name;
+      }
+    }
+    final entries = byCode.entries.toList();
+    entries.sort((a, b) => a.key.compareTo(b.key));
+    return entries;
+  }
+
+  List<String> get _customerCodeItems => <String>[
+    _selectCustomerCode,
+    ..._customerCodeOptions.map(
+      (entry) => _customerCodeLabel(entry.key, entry.value),
+    ),
+  ];
+
+  String _customerCodeFromSelection(String selected) {
+    final normalized = selected.trim();
+    if (normalized.isEmpty || normalized == _selectCustomerCode) return '';
+    for (final entry in _customerCodeOptions) {
+      if (_customerCodeLabel(entry.key, entry.value) == normalized) {
+        return entry.key;
+      }
+    }
+    // Backward-safe: in case a plain code is already saved in state.
+    final exactCode = _customerCodeOptions.where((e) => e.key == normalized);
+    if (exactCode.isNotEmpty) return exactCode.first.key;
+    return '';
+  }
+
+  List<String> get _contractNoItems => _buildOptions(
+    _selectedCustomerContracts.map((row) => row.contractNo),
+    _selectContractNo,
+  );
+
+  List<ContractData> get _selectedContractRows {
+    if (contractNo.trim().isEmpty || contractNo.trim() == _selectContractNo) {
+      return _selectedCustomerContracts;
+    }
+    return _selectedCustomerContracts
+        .where((row) => row.contractNo.trim() == contractNo.trim())
+        .toList();
+  }
+
+  List<String> get _itemCodeItems => _buildOptions(
+    _selectedContractRows.map((row) => row.itemNo),
+    _selectItemCode,
+  );
+
+  List<String> get _mfrSerialItems => _buildOptions(
+    _selectedContractRows.map((row) => row.mfrSerialNo),
+    _selectMfrSerialNo,
+  );
+
+  List<String> get _serialNumberItems => _buildOptions(
+    _selectedContractRows.map((row) => row.serialNumber),
+    _selectSerialNumber,
+  );
+
+  List<String> get _projectItems => _buildOptions(
+    _projectData.map((row) => row.displayLabel),
+    _selectProject,
+  );
+
+  List<String> get _employeeItems => _buildOptions(
+    _employeeData.map((row) => row.employeeName),
+    _selectAttendBy,
+  );
+
+  List<String> get _problemTypeItems => _buildOptions(
+    _problemTypeData.map((row) => row.problemType),
+    _selectProblemType,
+  );
+
+  List<String> get _problemSubTypeItems => _buildOptions(
+    _problemSubTypeData.map((row) => row.problemSubType),
+    _selectProblemSubType,
+  );
+
+  String _projectCodeFromSelection(String selected) {
+    final normalized = selected.trim();
+    if (normalized.isEmpty || normalized == _selectProject) return '';
+    for (final row in _projectData) {
+      if (row.displayLabel == normalized) {
+        return row.projectCode;
+      }
+    }
+    return '';
+  }
+
+  void _setCustomerFieldsFromContract(ContractData contract) {
+    customerName = contract.businessPartnerName.trim().isEmpty
+        ? _selectCustomerName
+        : contract.businessPartnerName.trim();
+    phone = contract.phone.trim().isEmpty ? _selectPhone : contract.phone.trim();
+    email = contract.email.trim().isEmpty ? _selectEmail : contract.email.trim();
+    _syncCustomerTextControllers();
+  }
+
+  void _setProductFieldsFromContract(ContractData contract) {
+    final nextItemCode = contract.itemNo.trim();
+    final nextMfr = contract.mfrSerialNo.trim();
+    final nextSerial = contract.serialNumber.trim();
+    itemCode = nextItemCode.isEmpty ? _selectItemCode : nextItemCode;
+    mfrSerialNumber = nextMfr.isEmpty ? _selectMfrSerialNo : nextMfr;
+    serialNumber = nextSerial.isEmpty ? _selectSerialNumber : nextSerial;
+  }
+
+  void _resetProductSelection() {
+    itemCode = _selectItemCode;
+    mfrSerialNumber = _selectMfrSerialNo;
+    serialNumber = _selectSerialNumber;
+  }
+
+  void _resetCustomerSelection() {
+    customerName = _selectCustomerName;
+    phone = _selectPhone;
+    email = _selectEmail;
+    contractNo = _selectContractNo;
+    _syncCustomerTextControllers();
+    _resetProductSelection();
+  }
+
+  void _syncCustomerTextControllers() {
+    customerNameCtrl.text =
+        customerName == _selectCustomerName ? '' : customerName;
+    phoneCtrl.text = phone == _selectPhone ? '' : phone;
+    emailCtrl.text = email == _selectEmail ? '' : email;
+  }
+
+  void _onCustomerCodeChanged(String? value) {
+    final nextValue = (value ?? '').trim().isEmpty
+        ? _selectCustomerCode
+        : value!.trim();
+    setState(() {
+      customerCode = nextValue;
+      final selectedCode = _customerCodeFromSelection(customerCode);
+      final contracts = _selectedCustomerContracts;
+      if (selectedCode.isEmpty || contracts.isEmpty) {
+        _resetCustomerSelection();
+        return;
+      }
+      final firstContract = contracts.first;
+      _setCustomerFieldsFromContract(firstContract);
+      contractNo = firstContract.contractNo.trim().isEmpty
+          ? _selectContractNo
+          : firstContract.contractNo.trim();
+      _setProductFieldsFromContract(firstContract);
+    });
+  }
+
+  void _onContractNoChanged(String? value) {
+    final nextValue = (value ?? '').trim().isEmpty
+        ? _selectContractNo
+        : value!.trim();
+    setState(() {
+      contractNo = nextValue;
+      if (nextValue == _selectContractNo) {
+        _resetProductSelection();
+        return;
+      }
+      final matched = _selectedCustomerContracts.where(
+        (row) => row.contractNo.trim() == nextValue,
+      );
+      if (matched.isEmpty) {
+        _resetProductSelection();
+        return;
+      }
+      final selectedRow = matched.first;
+      _setCustomerFieldsFromContract(selectedRow);
+      _setProductFieldsFromContract(selectedRow);
+    });
+  }
+
+  Future<void> _loadContractData() async {
+    setState(() {
+      _isContractDataLoading = true;
+      _contractLoadError = null;
+    });
+    try {
+      final data = await _serviceCallViewModel.fetchContractData();
+      if (!mounted) return;
+      setState(() {
+        _contractData
+          ..clear()
+          ..addAll(data);
+        _resetCustomerSelection();
+        customerCode = _selectCustomerCode;
+        _contractLoadError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _contractLoadError = 'Unable to load customer data. Please retry.';
+      });
+      _showSnackBar('Unable to load customer data: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isContractDataLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadProjectData() async {
+    setState(() {
+      _isProjectDataLoading = true;
+      _projectLoadError = null;
+    });
+    try {
+      final data = await _serviceCallViewModel.fetchProjectData();
+      if (!mounted) return;
+      setState(() {
+        _projectData
+          ..clear()
+          ..addAll(data);
+        selectedProject = _selectProject;
+        _projectLoadError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _projectLoadError = 'Unable to load project data. Please retry.';
+      });
+      _showSnackBar('Unable to load project data: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProjectDataLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadEmployeeData() async {
+    setState(() {
+      _isEmployeeDataLoading = true;
+      _employeeLoadError = null;
+    });
+    try {
+      final data = await _serviceCallViewModel.fetchEmployeeData();
+      if (!mounted) return;
+      setState(() {
+        _employeeData
+          ..clear()
+          ..addAll(data);
+        assignedTech = _selectAttendBy;
+        _employeeLoadError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _employeeLoadError = 'Unable to load employee data. Please retry.';
+      });
+      _showSnackBar('Unable to load employee data: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isEmployeeDataLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadProblemTypeData() async {
+    setState(() {
+      _isProblemTypeDataLoading = true;
+      _problemTypeLoadError = null;
+    });
+    try {
+      final data = await _serviceCallViewModel.fetchProblemTypeData();
+      if (!mounted) return;
+      setState(() {
+        _problemTypeData
+          ..clear()
+          ..addAll(data);
+        problemType = _selectProblemType;
+        _problemTypeLoadError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _problemTypeLoadError = 'Unable to load problem types. Please retry.';
+      });
+      _showSnackBar('Unable to load problem types: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProblemTypeDataLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadProblemSubTypeData() async {
+    setState(() {
+      _isProblemSubTypeDataLoading = true;
+      _problemSubTypeLoadError = null;
+    });
+    try {
+      final data = await _serviceCallViewModel.fetchProblemSubTypeData();
+      if (!mounted) return;
+      setState(() {
+        _problemSubTypeData
+          ..clear()
+          ..addAll(data);
+        problemSubType = _selectProblemSubType;
+        _problemSubTypeLoadError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _problemSubTypeLoadError =
+            'Unable to load problem sub types. Please retry.';
+      });
+      _showSnackBar('Unable to load problem sub types: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProblemSubTypeDataLoading = false;
+        });
+      }
+    }
+  }
+
   // ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
+    final isMasterDataLoading =
+        _isContractDataLoading ||
+        _isProjectDataLoading ||
+        _isEmployeeDataLoading ||
+        _isProblemTypeDataLoading ||
+        _isProblemSubTypeDataLoading ||
+        _isServiceNoLoading;
+
     return Scaffold(
-      appBar: AppBar(title: const Text("Service Management / Calls")),
+      appBar: AppBar(
+        title: const Text("Service Management / Calls"),
+        actions: [
+          IconButton(
+            tooltip: 'Reload',
+            onPressed: isMasterDataLoading ? null : () => _reloadMasterData(),
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Form(
           key: _formKey,
+          autovalidateMode: _showValidationErrors
+              ? AutovalidateMode.always
+              : AutovalidateMode.disabled,
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -331,21 +789,106 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                 "Customer Information",
                 Column(
                   children: [
-                    _field("Customer Code", customerCodeCtrl),
-                    _field("Customer Name", customerNameCtrl),
-                    _field("Phone", phoneCtrl, keyboard: TextInputType.phone),
+                    _dropdown(
+                      "Customer Code",
+                      customerCode,
+                      _customerCodeItems,
+                      _onCustomerCodeChanged,
+                      requiredField: true,
+                      invalidValues: const [_selectCustomerCode],
+                    ),
+                    _field(
+                      "Customer Name",
+                      customerNameCtrl,
+                      readOnly: true,
+                    ),
+                    _field(
+                      "Phone",
+                      phoneCtrl,
+                      keyboard: TextInputType.phone,
+                      readOnly: true,
+                    ),
                     _field(
                       "Email",
                       emailCtrl,
                       keyboard: TextInputType.emailAddress,
+                      readOnly: true,
                     ),
                     _dropdown(
                       "Contract No.",
                       contractNo,
-                      ["CN-1001", "CN-1002", "CN-1003"],
-                      (v) => setState(() => contractNo = v),
+                      _contractNoItems,
+                      _onContractNoChanged,
                     ),
-                    _field("Project", projectCtrl),
+                    if (_isContractDataLoading)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 12),
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
+                    if (!_isContractDataLoading && _contractLoadError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: Colors.redAccent,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _contractLoadError!,
+                                style: const TextStyle(color: Colors.redAccent),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: _loadContractData,
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    _dropdown(
+                      "Project",
+                      selectedProject,
+                      _projectItems,
+                      (v) => setState(
+                        () => selectedProject =
+                            (v ?? '').trim().isEmpty ? _selectProject : v!,
+                      ),
+                      requiredField: true,
+                      invalidValues: const [_selectProject],
+                    ),
+                    if (_isProjectDataLoading)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 12),
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
+                    if (!_isProjectDataLoading && _projectLoadError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: Colors.redAccent,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _projectLoadError!,
+                                style: const TextStyle(color: Colors.redAccent),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: _loadProjectData,
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -355,22 +898,62 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                 Column(
                   children: [
                     _dropdown("Status", ticketStatus, [
+                      "Select Status",
                       "Open",
                       "In Progress",
                       "Closed",
-                    ], (v) => setState(() => ticketStatus = v!)),
+                    ], (v) => setState(() => ticketStatus = v!),
+                        requiredField: true,
+                        invalidValues: const ["Select Status"]),
                     _dropdown("Priority", priority, [
+                      "Select Priority",
                       "Low",
                       "Medium",
                       "High",
-                    ], (v) => setState(() => priority = v!)),
+                    ], (v) => setState(() => priority = v!),
+                        requiredField: true,
+                        invalidValues: const ["Select Priority"]),
                     const Divider(),
                     _dropdown(
-                      "Assigned Tech",
+                      "Attend By",
                       assignedTech,
-                      ["Select AssignedPerson", "Tech 1", "Tech 2"],
-                      (v) => setState(() => assignedTech = v),
+                      _employeeItems,
+                      (v) => setState(
+                        () => assignedTech =
+                            (v ?? '').trim().isEmpty ? _selectAttendBy : v!,
+                      ),
+                      requiredField: true,
+                      invalidValues: const [_selectAttendBy],
                     ),
+                    if (_isEmployeeDataLoading)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 12),
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
+                    if (!_isEmployeeDataLoading && _employeeLoadError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: Colors.redAccent,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _employeeLoadError!,
+                                style: const TextStyle(color: Colors.redAccent),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: _loadEmployeeData,
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
                     _dropdown("Department", department, [
                       "select Department",
                       "Accounts",
@@ -389,7 +972,9 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                       "Solution Design - Operations",
                       "Supply_Chain_Management",
                       "Support",
-                    ], (v) => setState(() => department = v!)),
+                    ], (v) => setState(() => department = v!),
+                        requiredField: true,
+                        invalidValues: const ["select Department"]),
                     _dropdown(
                       "ServiceType",
                       serviceType,
@@ -405,6 +990,8 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                         "PROJECT",
                       ],
                       (v) => setState(() => serviceType = v!),
+                      requiredField: true,
+                      invalidValues: const ["select ServiceType"],
                     ),
                   ],
                 ),
@@ -431,6 +1018,8 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                         "Courier",
                       ],
                       (v) => setState(() => originType = v!),
+                      requiredField: true,
+                      invalidValues: const ["Select"],
                     ),
                     _dropdown("Call Type", callType, [
                       "Select Call Type",
@@ -459,88 +1048,100 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                       "UNDER WARRENTY",
                       "double entry",
                       "Onsite work",
-                    ], (v) => setState(() => callType = v!)),
+                    ], (v) => setState(() => callType = v!),
+                        requiredField: true,
+                        invalidValues: const ["Select Call Type"]),
                     _dropdown("Chargeable", chargeable, [
                       "Select",
                       "Chargeable",
                       "FOC",
-                    ], (v) => setState(() => chargeable = v!)),
+                    ], (v) => setState(() => chargeable = v!),
+                        requiredField: true,
+                        invalidValues: const ["Select"]),
                     _dropdown("Job Sheet", jobSheet, [
+                      "Select",
                       "No",
                       "YES",
                       "NO",
-                    ], (v) => setState(() => jobSheet = v!)),
+                    ], (v) => setState(() => jobSheet = v!),
+                        requiredField: true,
+                        invalidValues: const ["Select"]),
                     _dropdown(
                       "Problem Type",
                       problemType,
-                      [
-                        "Select Problem Type",
-                        "Not working",
-                        "Boom Barrier",
-                        "AMC Contract",
-                        "AMC Payment",
-                        "Boom Barrier",
-                        "AMC Contract",
-                        "AMC Payment",
-                        "AMC FOLLOW UP",
-                        "Tender Submission",
-                        "PMT",
-                        "Material Delivery",
-                        "Maintenance Work",
-                        "XBIS",
-                        "Meeting",
-                        "PLC",
-                        "UVSS",
-                        "Bollard",
-                        "Site Handover",
-                        "Warranty",
-                        "DEMO/TRIAL",
-                        "Meeting/Others",
-                        "Repair",
-                        "NVM",
-                        "Material Acceptance",
-                        "SALES",
-                        "Survey",
-                        "Spike Barrier",
-                        "LCD Monitor",
-                      ],
+                      _problemTypeItems,
                       (v) => setState(() => problemType = v!),
                       requiredField: true,
+                      invalidValues: const [_selectProblemType],
                     ),
+                    if (_isProblemTypeDataLoading)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 12),
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
+                    if (!_isProblemTypeDataLoading &&
+                        _problemTypeLoadError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: Colors.redAccent,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _problemTypeLoadError!,
+                                style: const TextStyle(color: Colors.redAccent),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: _loadProblemTypeData,
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
                     _dropdown(
                       "Problem Sub Type",
                       problemSubType,
-                      [
-                        "Select ProblemSub Type",
-                        "UPS not working",
-                        "PMT of Debugging",
-                        "PMT",
-                        "Motor , Conveyor Bel",
-                        "Turnstile",
-                        "XBIS 5335S",
-                        "Boom Barrier",
-                        "KMS",
-                        "Meeting",
-                        "UVSS",
-                        "Mobile tracer",
-                        "X-Ray Machine",
-                        "Delivery of cctv",
-                        "NETWORK SWITCHES",
-                        "Work at Site",
-                        "AVTDS",
-                        "PLC",
-                        "NVM",
-                        "Bollard",
-                        "VLT-2800",
-                        "Buried Cable Systems",
-                        "GMS",
-                        "Spike Barrier",
-                        "CCTV",
-                        "Acess Control System",
-                        "HHMD",
-                      ],
+                      _problemSubTypeItems,
                       (v) => setState(() => problemSubType = v!),
+                      requiredField: true,
+                      invalidValues: const [_selectProblemSubType],
                     ),
+                    if (_isProblemSubTypeDataLoading)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 12),
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
+                    if (!_isProblemSubTypeDataLoading &&
+                        _problemSubTypeLoadError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: Colors.redAccent,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _problemSubTypeLoadError!,
+                                style: const TextStyle(color: Colors.redAccent),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: _loadProblemSubTypeData,
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -556,13 +1157,21 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                     ], (v) => setState(() => tourClaim = v!)),
                     _datePicker(
                       "Tour Start Date",
-                      tourStartDate,
-                      (d) => setState(() => tourStartDate = d),
+                      date: tourStartDate,
+                      controller: tourStartDateCtrl,
+                      onPicked: (d) => setState(() {
+                        tourStartDate = d;
+                        tourStartDateCtrl.text = _formatDate(d);
+                      }),
                     ),
                     _datePicker(
                       "Tour End Date",
-                      tourEndDate,
-                      (d) => setState(() => tourEndDate = d),
+                      date: tourEndDate,
+                      controller: tourEndDateCtrl,
+                      onPicked: (d) => setState(() {
+                        tourEndDate = d;
+                        tourEndDateCtrl.text = _formatDate(d);
+                      }),
                     ),
                     _field(
                       "Total Expense Amount",
@@ -587,22 +1196,36 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                     _dropdown(
                       "Item Code",
                       itemCode,
-                      ["Item 001", "Item 002"],
-                      (v) => setState(() => itemCode = v),
+                      _itemCodeItems,
+                      (v) => setState(
+                        () => itemCode =
+                            (v ?? '').trim().isEmpty ? _selectItemCode : v!,
+                      ),
                       requiredField: true,
+                      invalidValues: const [_selectItemCode],
                     ),
                     _dropdown(
                       "MFR Serial Number",
                       mfrSerialNumber,
-                      ["MFR001", "MFR002"],
-                      (v) => setState(() => mfrSerialNumber = v),
+                      _mfrSerialItems,
+                      (v) => setState(
+                        () => mfrSerialNumber =
+                            (v ?? '').trim().isEmpty ? _selectMfrSerialNo : v!,
+                      ),
+                      invalidValues: const [_selectMfrSerialNo],
                     ),
                     _dropdown(
                       "Serial Number",
                       serialNumber,
-                      ["SN001", "SN002"],
-                      (v) => setState(() => serialNumber = v),
+                      _serialNumberItems,
+                      (v) => setState(
+                        () => serialNumber =
+                            (v ?? '').trim().isEmpty
+                            ? _selectSerialNumber
+                            : v!,
+                      ),
                       requiredField: true,
+                      invalidValues: const [_selectSerialNumber],
                     ),
                   ],
                 ),
@@ -626,7 +1249,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                           lastDate: DateTime(2100),
                           initialDate: closedDate ?? DateTime.now(),
                         );
-                        if (picked == null) return;
+                        if (!mounted || picked == null) return;
                         setState(() {
                           closedDate = picked;
                           closedDateCtrl.text = _formatDate(picked);
@@ -636,9 +1259,27 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                     TextFormField(
                       controller: remarksCtrl,
                       maxLines: 4,
+                      validator: (value) {
+                        if ((value ?? '').trim().isEmpty) {
+                          return "Please enter Remarks";
+                        }
+                        return null;
+                      },
                       decoration: const InputDecoration(
                         labelText: "Remarks",
                         border: OutlineInputBorder(),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Color(0xFFBDBDBD)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                        ),
+                        errorBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.red),
+                        ),
+                        focusedErrorBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.red, width: 1.5),
+                        ),
                       ),
                     ),
                   ],
@@ -651,16 +1292,39 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                   length: 2,
                   child: Column(
                     children: [
-                      TabBar(
-                        onTap: (index) {
-                          setState(() {
-                            _detailsTabIndex = index;
-                          });
-                        },
-                        tabs: [
-                          Tab(text: "Subject"),
-                          Tab(text: "Attachments"),
-                        ],
+                      Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3F4F6),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: TabBar(
+                          labelColor: Colors.white,
+                          unselectedLabelColor: const Color(0xFF374151),
+                          indicator: BoxDecoration(
+                            color: const Color(0xFF6D28D9),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          indicatorSize: TabBarIndicatorSize.tab,
+                          dividerColor: Colors.transparent,
+                          labelStyle: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          unselectedLabelStyle: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          tabs: const [
+                            Tab(text: "Subject"),
+                            Tab(text: "Attachments"),
+                          ],
+                          onTap: (index) {
+                            _safeUnfocus();
+                            setState(() {
+                              _detailsTabIndex = index;
+                            });
+                          },
+                        ),
                       ),
                       const SizedBox(height: 12),
                       AnimatedSize(
@@ -670,9 +1334,33 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                             ? TextFormField(
                                 controller: subjectCtrl,
                                 maxLines: 3,
+                                validator: (value) {
+                                  if ((value ?? '').trim().isEmpty) {
+                                    return "Please enter Subject";
+                                  }
+                                  return null;
+                                },
                                 decoration: const InputDecoration(
                                   hintText: "Enter subject details",
                                   border: OutlineInputBorder(),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(color: Color(0xFFBDBDBD)),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Color(0xFF2563EB),
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.red),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Colors.red,
+                                      width: 1.5,
+                                    ),
+                                  ),
                                 ),
                               )
                             : LayoutBuilder(
@@ -734,20 +1422,47 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                                         ),
                                         const SizedBox(height: 8),
                                         ..._attachments.map(
-                                          (file) => ListTile(
-                                            dense: true,
-                                            contentPadding: EdgeInsets.zero,
-                                            leading: const Icon(
-                                              Icons.attach_file,
+                                          (file) => Container(
+                                            margin: const EdgeInsets.only(
+                                              bottom: 10,
                                             ),
-                                            title: Text(_fileName(file.path)),
-                                            trailing: IconButton(
-                                              icon: const Icon(Icons.close),
-                                              onPressed: () {
-                                                setState(() {
-                                                  _attachments.remove(file);
-                                                });
-                                              },
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              border: Border.all(
+                                                color: const Color(0xFFE5E7EB),
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                _attachmentPreview(file),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                      top: 4,
+                                                    ),
+                                                    child: Text(
+                                                      _fileName(file.path),
+                                                      maxLines: 2,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(Icons.close),
+                                                  onPressed: () {
+                                                    setState(() {
+                                                      _attachments.remove(file);
+                                                    });
+                                                  },
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ),
@@ -764,28 +1479,76 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
 
               const SizedBox(height: 24),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text("Cancel"),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isSubmitting ? null : _submit,
-                      child: _isSubmitting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text("Submit"),
-                    ),
-                  ),
-                ],
+              Builder(
+                builder: (context) {
+                  final isProcessing =
+                      _isSubmitting ||
+                      _isContractDataLoading ||
+                      _isProjectDataLoading ||
+                      _isEmployeeDataLoading ||
+                      _isProblemTypeDataLoading ||
+                      _isProblemSubTypeDataLoading ||
+                      _isServiceNoLoading;
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: isProcessing ? null : () => Navigator.pop(context),
+                          child: Container(
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFBDBDBD)),
+                            ),
+                            alignment: Alignment.center,
+                            child: const Text(
+                              "Cancel",
+                              style: TextStyle(
+                                color: Colors.black87,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: isProcessing ? null : _confirmAndSubmit,
+                          child: Container(
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: isProcessing
+                                  ? Colors.grey.shade400
+                                  : Theme.of(context).colorScheme.primary,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            alignment: Alignment.center,
+                            child: isProcessing
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    "Submit",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           ),
@@ -821,6 +1584,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     TextEditingController ctrl, {
     TextInputType keyboard = TextInputType.text,
     bool readOnly = false,
+    bool requiredField = false,
     Widget? suffixIcon,
     VoidCallback? onTap,
   }) {
@@ -830,10 +1594,32 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
         controller: ctrl,
         keyboardType: keyboard,
         readOnly: readOnly,
+        showCursor: !readOnly,
+        enableInteractiveSelection: !readOnly,
         onTap: onTap,
+        validator: requiredField
+            ? (value) {
+                if ((value ?? '').trim().isEmpty) {
+                  return "Please enter $label";
+                }
+                return null;
+              }
+            : null,
         decoration: InputDecoration(
           labelText: label,
           border: const OutlineInputBorder(),
+          enabledBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Color(0xFFBDBDBD)),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Color(0xFF2563EB), width: 1.5),
+          ),
+          errorBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.red),
+          ),
+          focusedErrorBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.red, width: 1.5),
+          ),
           suffixIcon: suffixIcon,
         ),
       ),
@@ -846,23 +1632,151 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     List<String> items,
     ValueChanged<String?> onChanged, {
     bool requiredField = false,
+    List<String> invalidValues = const <String>[],
   }) {
+    final uniqueItems = LinkedHashSet<String>.from(
+      items.map((e) => e.trim()).where((e) => e.isNotEmpty),
+    ).toList();
+    final normalizedValue = value?.trim();
+    final dropdownValue = (normalizedValue != null &&
+            uniqueItems.any((item) => item == normalizedValue))
+        ? normalizedValue
+        : null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: DropdownButtonFormField<String>(
-        value: value,
-        items: items
-            .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-            .toList(),
-        onChanged: onChanged,
+      child: FormField<String>(
+        initialValue: dropdownValue,
         validator: requiredField
-            ? (v) => v == null ? "Please select $label" : null
+            ? (v) {
+                final current = (v ?? '').trim();
+                if (current.isEmpty) return "Please select $label";
+                if (invalidValues.any((item) => item.trim() == current)) {
+                  return "Please select $label";
+                }
+                return null;
+              }
             : null,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-        ),
+        builder: (fieldState) {
+          final currentValue = (fieldState.value ?? '').trim();
+          final hasSelection = currentValue.isNotEmpty;
+          return GestureDetector(
+            onTap: () async {
+              final selected = await _showSearchableDropdownDialog(
+                label: label,
+                items: uniqueItems,
+                currentValue: currentValue,
+              );
+              if (selected == null) return;
+              fieldState.didChange(selected);
+              onChanged(selected);
+            },
+            child: InputDecorator(
+              isEmpty: !hasSelection,
+              decoration: InputDecoration(
+                labelText: label,
+                hintText: 'Select',
+                border: const OutlineInputBorder(),
+                enabledBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: Color(0xFFBDBDBD)),
+                ),
+                focusedBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                ),
+                errorBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.red),
+                ),
+                focusedErrorBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.red, width: 1.5),
+                ),
+                suffixIcon: const Icon(Icons.arrow_drop_down),
+                errorText: fieldState.errorText,
+              ),
+              child: hasSelection
+                  ? Text(
+                      currentValue,
+                      style: const TextStyle(color: Colors.black87),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          );
+        },
       ),
+    );
+  }
+
+  Future<String?> _showSearchableDropdownDialog({
+    required String label,
+    required List<String> items,
+    required String currentValue,
+  }) async {
+    List<String> filteredItems = List<String>.from(items);
+    return await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Select $label'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      decoration: const InputDecoration(
+                        hintText: 'Search...',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) {
+                        final query = value.trim().toLowerCase();
+                        setDialogState(() {
+                          filteredItems = items
+                              .where((item) => item.toLowerCase().contains(query))
+                              .toList();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 260,
+                      child: filteredItems.isEmpty
+                          ? const Center(child: Text('No results found'))
+                          : ListView.builder(
+                              itemCount: filteredItems.length,
+                              itemBuilder: (context, index) {
+                                final option = filteredItems[index];
+                                final isSelected = option == currentValue;
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(option),
+                                  trailing: isSelected
+                                      ? const Icon(Icons.check)
+                                      : null,
+                                  onTap: () {
+                                    _safeUnfocus();
+                                    Navigator.of(dialogContext).pop(option);
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _safeUnfocus();
+                    Navigator.of(dialogContext).pop();
+                  },
+                  child: const Text('Cancel'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -896,22 +1810,60 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     );
   }
 
+  Widget _attachmentPreview(XFile file) {
+    const previewSize = 100.0;
+    final fallback = Container(
+      width: previewSize,
+      height: previewSize,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Icon(Icons.broken_image_outlined, size: 20),
+    );
+
+    if (kIsWeb) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          file.path,
+          width: previewSize,
+          height: previewSize,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => fallback,
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.file(
+        File(file.path),
+        width: previewSize,
+        height: previewSize,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => fallback,
+      ),
+    );
+  }
+
   Widget _datePicker(
-    String label,
-    DateTime? date,
-    ValueChanged<DateTime> onPicked,
-  ) {
+    String label, {
+    required DateTime? date,
+    required TextEditingController controller,
+    required ValueChanged<DateTime> onPicked,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
         readOnly: true,
+        showCursor: false,
+        enableInteractiveSelection: false,
+        controller: controller,
         decoration: InputDecoration(
           labelText: label,
           border: const OutlineInputBorder(),
           suffixIcon: const Icon(Icons.calendar_today),
-        ),
-        controller: TextEditingController(
-          text: date == null ? "" : "${date.day}/${date.month}/${date.year}",
         ),
         onTap: () async {
           final picked = await showDatePicker(
@@ -920,7 +1872,8 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
             lastDate: DateTime(2100),
             initialDate: date ?? DateTime.now(),
           );
-          if (picked != null) onPicked(picked);
+          if (!mounted || picked == null) return;
+          onPicked(picked);
         },
       ),
     );
@@ -930,6 +1883,18 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     final day = date.day.toString().padLeft(2, '0');
     final month = date.month.toString().padLeft(2, '0');
     return '$day/$month/${date.year}';
+  }
+
+  String _formatDateTimeForApi(DateTime date) {
+    final normalized = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      date.hour,
+      date.minute,
+      date.second,
+    );
+    return normalized.toIso8601String();
   }
 
   Future<void> _pickAttachment(ImageSource source) async {
@@ -977,6 +1942,56 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     return File(path).uri.pathSegments.last;
   }
 
+  void _safeUnfocus() {
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  Future<void> _confirmAndSubmit() async {
+    if (_isSubmitting) return;
+    _safeUnfocus();
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+
+    if (_detailsTabIndex != 0) {
+      setState(() {
+        _detailsTabIndex = 0;
+      });
+      await Future<void>.delayed(Duration.zero);
+      if (!mounted) return;
+    }
+
+    if (!_showValidationErrors) {
+      setState(() {
+        _showValidationErrors = true;
+      });
+    }
+
+    final formState = _formKey.currentState;
+    if (formState == null || !formState.validate()) return;
+
+    final shouldSubmit = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Confirm Submit'),
+        content: const Text('Are you sure you want to submit this service call?'),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldSubmit == true) {
+      await _submit();
+    }
+  }
+
   void _showSnackBar(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -993,8 +2008,26 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
     if (_isSubmitting) return;
+    _safeUnfocus();
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+
+    if (_detailsTabIndex != 0) {
+      setState(() {
+        _detailsTabIndex = 0;
+      });
+      await Future<void>.delayed(Duration.zero);
+      if (!mounted) return;
+    }
+    if (!_showValidationErrors) {
+      setState(() {
+        _showValidationErrors = true;
+      });
+    }
+    final formState = _formKey.currentState;
+    if (formState == null || !formState.validate()) return;
+    print('SERVICE CALL SUBMIT CLICKED');
 
     setState(() {
       _isSubmitting = true;
@@ -1002,32 +2035,38 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
 
     final expenseAmount = double.tryParse(expenseCtrl.text.trim()) ?? 0;
     final request = ServiceCallRequest(
-      customerCode: customerCodeCtrl.text.trim(),
-      customerName: customerNameCtrl.text.trim(),
-      phone: phoneCtrl.text.trim(),
-      email: emailCtrl.text.trim(),
-      contractNo: _valueOrEmpty(contractNo, <String>[]),
-      itemCode: _valueOrEmpty(itemCode, <String>[]),
-      serialNumber: _valueOrEmpty(serialNumber, <String>[]),
-      mfrSerialno: _valueOrEmpty(mfrSerialNumber, <String>[]),
+      customerCode: _customerCodeFromSelection(customerCode),
+      customerName: _valueOrEmpty(customerName, <String>[_selectCustomerName]),
+      phone: _valueOrEmpty(phone, <String>[_selectPhone]),
+      email: _valueOrEmpty(email, <String>[_selectEmail]),
+      contractNo: _valueOrEmpty(contractNo, <String>[_selectContractNo]),
+      itemCode: _valueOrEmpty(itemCode, <String>[_selectItemCode]),
+      serialNumber: _valueOrEmpty(serialNumber, <String>[_selectSerialNumber]),
+      mfrSerialno: _valueOrEmpty(mfrSerialNumber, <String>[_selectMfrSerialNo]),
       currentStatus: ticketStatus.trim(),
       priority: priority.trim(),
       assignedTech: _valueOrEmpty(assignedTech, <String>[
-        'Select AssignedPerson',
+        _selectAttendBy,
       ]),
       serviceType: _valueOrEmpty(serviceType, <String>['select ServiceType']),
+      serviceNo: serviceNoCtrl.text.trim(),
+      createdDate: _formatDateTimeForApi(DateTime.now()),
+      closedDate: closedDate == null ? null : _formatDateTimeForApi(closedDate!),
       originType: _valueOrEmpty(originType, <String>['Select']),
-      problemType: _valueOrEmpty(problemType, <String>['Select Problem Type']),
+      problemType: _valueOrEmpty(problemType, <String>[_selectProblemType]),
       problemSubType: _valueOrEmpty(problemSubType, <String>[
-        'Select ProblemSub Type',
+        _selectProblemSubType,
       ]),
       callType: _valueOrEmpty(callType, <String>['Select Call Type']),
       jobSheet: jobSheet.trim(),
       tourClaim: tourClaim.trim(),
       subjects: subjectCtrl.text.trim(),
+      tourStartDate:
+          tourStartDate == null ? null : _formatDateTimeForApi(tourStartDate!),
+      tourEndDate: tourEndDate == null ? null : _formatDateTimeForApi(tourEndDate!),
       tourLocation: tourLocationCtrl.text.trim(),
       repairAssesmentType: _valueOrEmpty(repairAssessment, <String>['Select']),
-      projectCode: projectCtrl.text.trim(),
+      projectCode: _projectCodeFromSelection(selectedProject),
       chargeable: _valueOrEmpty(chargeable, <String>['Select']),
       remarks: remarksCtrl.text.trim(),
       expenseAmount: expenseAmount,
@@ -1036,7 +2075,9 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     print('SERVICE CALL FORM DATA: ${request.toJson()}');
 
     try {
+      print('SERVICE CALL API CALL START');
       final response = await _serviceCallViewModel.createServiceCall(request);
+      print('SERVICE CALL API CALL SUCCESS: $response');
       if (!mounted) return;
       final message = (response['message'] ?? 'Service Call Submitted')
           .toString();
@@ -1057,6 +2098,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
+      print('SERVICE CALL API CALL ERROR: $e');
       if (!mounted) return;
       _showSnackBar(e.toString());
     } finally {

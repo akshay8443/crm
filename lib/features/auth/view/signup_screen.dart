@@ -32,9 +32,8 @@ class _SignupScreenState extends State<SignupScreen> {
       initialDate: DateTime(2000),
     );
 
-    if (date != null) {
-      dobCtrl.text = "${date.day}/${date.month}/${date.year}";
-    }
+    if (!mounted || date == null) return;
+    dobCtrl.text = "${date.day}/${date.month}/${date.year}";
   }
 
   void _signup() async {
@@ -45,6 +44,7 @@ class _SignupScreenState extends State<SignupScreen> {
     // 🔸 Simulate API call
     await Future.delayed(const Duration(seconds: 2));
 
+    if (!mounted) return;
     setState(() => isLoading = false);
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -55,6 +55,18 @@ class _SignupScreenState extends State<SignupScreen> {
     );
 
     Navigator.pop(context); // go back to login
+  }
+
+  @override
+  void dispose() {
+    firstNameCtrl.dispose();
+    lastNameCtrl.dispose();
+    emailCtrl.dispose();
+    phoneCtrl.dispose();
+    passwordCtrl.dispose();
+    confirmPasswordCtrl.dispose();
+    dobCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -289,6 +301,5 @@ Widget _input({
     ));
   }
 }
-
 
 

@@ -804,10 +804,9 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           firstDate: DateTime(2020),
           lastDate: DateTime(2100),
         );
-        if (picked != null) {
-          controller.text =
-              "${picked.day.toString().padLeft(2, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.year}";
-        }
+        if (!mounted || picked == null) return;
+        controller.text =
+            "${picked.day.toString().padLeft(2, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.year}";
       },
     );
   }
@@ -826,4 +825,3 @@ class _PurchaseItem {
     required this.qty,
   });
 }
-

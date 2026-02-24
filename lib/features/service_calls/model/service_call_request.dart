@@ -11,6 +11,9 @@ class ServiceCallRequest {
   final String priority;
   final String assignedTech;
   final String serviceType;
+  final String serviceNo;
+  final String createdDate;
+  final String? closedDate;
   final String originType;
   final String problemType;
   final String problemSubType;
@@ -18,6 +21,8 @@ class ServiceCallRequest {
   final String jobSheet;
   final String tourClaim;
   final String subjects;
+  final String? tourStartDate;
+  final String? tourEndDate;
   final String tourLocation;
   final String repairAssesmentType;
   final String projectCode;
@@ -38,6 +43,9 @@ class ServiceCallRequest {
     required this.priority,
     required this.assignedTech,
     required this.serviceType,
+    required this.serviceNo,
+    required this.createdDate,
+    this.closedDate,
     required this.originType,
     required this.problemType,
     required this.problemSubType,
@@ -45,6 +53,8 @@ class ServiceCallRequest {
     required this.jobSheet,
     required this.tourClaim,
     required this.subjects,
+    this.tourStartDate,
+    this.tourEndDate,
     required this.tourLocation,
     required this.repairAssesmentType,
     required this.projectCode,
@@ -67,6 +77,9 @@ class ServiceCallRequest {
       'priority': priority,
       'assignedTech': assignedTech,
       'serviceType': serviceType,
+      'serviceNo': serviceNo,
+      'createdDate': createdDate,
+      'closedDate': closedDate,
       'originType': originType,
       'problemType': problemType,
       'problemSubType': problemSubType,
@@ -74,6 +87,8 @@ class ServiceCallRequest {
       'jobSheet': jobSheet,
       'tourClaim': tourClaim,
       'subjects': subjects,
+      'tourStartDate': tourStartDate,
+      'tourEndDate': tourEndDate,
       'tourLocation': tourLocation,
       'repairAssesmentType': repairAssesmentType,
       'projectCode': projectCode,

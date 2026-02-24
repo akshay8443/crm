@@ -16,6 +16,10 @@ class MyApp extends StatelessWidget {
       brightness: Brightness.light,
       useMaterial3: false,
       scaffoldBackgroundColor: Colors.white,
+      splashFactory: NoSplash.splashFactory,
+      splashColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      hoverColor: Colors.transparent,
       colorScheme: ColorScheme.fromSeed(
         seedColor: const Color(0xFFC648B6),
         brightness: Brightness.light,

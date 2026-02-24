@@ -1,4 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../model/service_call_report_item.dart';
+import 'service_call_detail_screen.dart';
+import '../viewmodel/service_call_viewmodel.dart';
 
 class ServiceCallReportScreen extends StatefulWidget {
   const ServiceCallReportScreen({super.key});
@@ -8,6 +14,7 @@ class ServiceCallReportScreen extends StatefulWidget {
 }
 
 class _ServiceCallReportScreenState extends State<ServiceCallReportScreen> {
+  final _serviceCallViewModel = ServiceCallViewModel();
   final _serviceNoCtrl = TextEditingController();
   final _customerCtrl = TextEditingController();
   final _createdDateCtrl = TextEditingController();
@@ -15,31 +22,74 @@ class _ServiceCallReportScreenState extends State<ServiceCallReportScreen> {
   final _assignedTechCtrl = TextEditingController();
   final _statusCtrl = TextEditingController();
 
-  final List<_ServiceCallReportItem> _allRows = const [
-    _ServiceCallReportItem(
-      serviceNo: 'SC-000010',
-      customer: 'AFS Najafgarh',
-      createdDate: '06-Feb-2026',
-      priority: 'Medium',
-      assignedTech: '0',
-      status: 'O',
-    ),
-    _ServiceCallReportItem(
-      serviceNo: 'SC-000011',
-      customer: 'Airport Delhi',
-      createdDate: '08-Feb-2026',
-      priority: 'High',
-      assignedTech: 'Anil Kumar',
-      status: 'Open',
-    ),
-  ];
+  List<ServiceCallReportItem> _allRows = <ServiceCallReportItem>[];
+  List<ServiceCallReportItem> _filteredRows = <ServiceCallReportItem>[];
+  bool _isLoading = false;
+  String? _loadError;
 
-  List<_ServiceCallReportItem> _filteredRows = const [];
+  Future<void> _loadRows() async {
+    print('RPT_V3: _loadRows start');
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+      _allRows = <ServiceCallReportItem>[];
+      _filteredRows = <ServiceCallReportItem>[];
+    });
+    try {
+      final rows = await _serviceCallViewModel.fetchAllServiceCalls();
+      if (!mounted) return;
+      setState(() {
+        _allRows = rows;
+      });
+      _applyFilters();
+      print('RPT_V3: _loadRows success (${rows.length})');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = 'Unable to load service calls. Please retry.';
+        _allRows = <ServiceCallReportItem>[];
+        _filteredRows = <ServiceCallReportItem>[];
+      });
+      print('RPT_V3: _loadRows error: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unable to load service calls: $e')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _openServiceCallDetails(ServiceCallReportItem row) {
+    final serviceNo = row.serviceNo.trim();
+    if (serviceNo.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Service No is missing.')));
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ServiceCallDetailScreen(serviceNo: serviceNo),
+      ),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
-    _filteredRows = _allRows;
+    print('RPT_V3: initState');
+    // Always and only fetch from API on page init.
+    unawaited(_loadRows());
+    // Extra retry for fresh-install first-open race cases.
+    Future<void>.delayed(const Duration(seconds: 2), () {
+      if (!mounted || _isLoading) return;
+      unawaited(_loadRows());
+    });
   }
 
   @override
@@ -58,12 +108,23 @@ class _ServiceCallReportScreenState extends State<ServiceCallReportScreen> {
     final isMobile = MediaQuery.of(context).size.width < 800;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Open Service Call Report'),
+        title: const Text('Open Service Call Report [API V3]'),
+        actions: [
+          IconButton(
+            tooltip: 'Reload',
+            onPressed: _isLoading ? null : _loadRows,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: isMobile ? _buildMobileLayout() : _buildDesktopLayout(),
+        child: RefreshIndicator(
+          onRefresh: _loadRows,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: isMobile ? _buildMobileLayout() : _buildDesktopLayout(),
+          ),
         ),
       ),
     );
@@ -74,13 +135,31 @@ class _ServiceCallReportScreenState extends State<ServiceCallReportScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Open Service Call Report',
+          'Open Service Call Report [API V3]',
           style: TextStyle(
             fontSize: 34,
             fontWeight: FontWeight.w700,
             color: Color(0xFF3F51B5),
           ),
         ),
+        if (_isLoading) const LinearProgressIndicator(minHeight: 2),
+        if (!_isLoading && _loadError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.redAccent),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _loadError!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                ),
+                TextButton(onPressed: _loadRows, child: const Text('Retry')),
+              ],
+            ),
+          ),
         const SizedBox(height: 16),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -111,12 +190,12 @@ class _ServiceCallReportScreenState extends State<ServiceCallReportScreen> {
                 ..._filteredRows.map(
                   (row) => TableRow(
                     children: [
-                      _dataCell(row.serviceNo),
-                      _dataCell(row.customer),
-                      _dataCell(row.createdDate),
-                      _dataCell(row.priority),
-                      _dataCell(row.assignedTech),
-                      _dataCell(row.status),
+                      _dataCell(row.serviceNo, onTap: () => _openServiceCallDetails(row)),
+                      _dataCell(row.customer, onTap: () => _openServiceCallDetails(row)),
+                      _dataCell(row.createdDate, onTap: () => _openServiceCallDetails(row)),
+                      _dataCell(row.priority, onTap: () => _openServiceCallDetails(row)),
+                      _dataCell(row.assignedTech, onTap: () => _openServiceCallDetails(row)),
+                      _dataCell(row.status, onTap: () => _openServiceCallDetails(row)),
                     ],
                   ),
                 ),
@@ -138,14 +217,32 @@ class _ServiceCallReportScreenState extends State<ServiceCallReportScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Open Service Call Report',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF3F51B5),
+        // const Text(
+        //   'Open Service Call Report [API V3]',
+        //   style: TextStyle(
+        //     fontSize: 24,
+        //     fontWeight: FontWeight.w700,
+        //     color: Color(0xFF3F51B5),
+        //   ),
+        // ),
+        if (_isLoading) const LinearProgressIndicator(minHeight: 2),
+        if (!_isLoading && _loadError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.redAccent),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _loadError!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                ),
+                TextButton(onPressed: _loadRows, child: const Text('Retry')),
+              ],
+            ),
           ),
-        ),
         const SizedBox(height: 12),
         _mobileFilter('Service No', _serviceNoCtrl),
         _mobileFilter('Customer', _customerCtrl),
@@ -163,21 +260,35 @@ class _ServiceCallReportScreenState extends State<ServiceCallReportScreen> {
           ),
         ),
         const SizedBox(height: 12),
+        if (!_isLoading && _loadError == null && _filteredRows.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: Text(
+                'No service calls found.',
+                style: TextStyle(color: Colors.black54),
+              ),
+            ),
+          ),
         ..._filteredRows.map(
-          (row) => Card(
-            margin: const EdgeInsets.only(bottom: 10),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _mobileRow('Service No', row.serviceNo),
-                  _mobileRow('Customer', row.customer),
-                  _mobileRow('Created Date', row.createdDate),
-                  _mobileRow('Priority', row.priority),
-                  _mobileRow('Assigned Tech', row.assignedTech),
-                  _mobileRow('Status', row.status),
-                ],
+          (row) => InkWell(
+            onTap: () => _openServiceCallDetails(row),
+            borderRadius: BorderRadius.circular(8),
+            child: Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _mobileRow('Service No', row.serviceNo),
+                    _mobileRow('Customer', row.customer),
+                    _mobileRow('Created Date', row.createdDate),
+                    _mobileRow('Priority', row.priority),
+                    _mobileRow('Assigned Tech', row.assignedTech),
+                    _mobileRow('Status', row.status),
+                  ],
+                ),
               ),
             ),
           ),
@@ -223,12 +334,15 @@ class _ServiceCallReportScreenState extends State<ServiceCallReportScreen> {
     );
   }
 
-  Widget _dataCell(String value) {
-    return Padding(
-      padding: const EdgeInsets.all(10),
-      child: Text(
-        value,
-        style: const TextStyle(fontSize: 18),
+  Widget _dataCell(String value, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Text(
+          value,
+          style: const TextStyle(fontSize: 18),
+        ),
       ),
     );
   }
@@ -284,22 +398,4 @@ class _ServiceCallReportScreenState extends State<ServiceCallReportScreen> {
       }).toList();
     });
   }
-}
-
-class _ServiceCallReportItem {
-  const _ServiceCallReportItem({
-    required this.serviceNo,
-    required this.customer,
-    required this.createdDate,
-    required this.priority,
-    required this.assignedTech,
-    required this.status,
-  });
-
-  final String serviceNo;
-  final String customer;
-  final String createdDate;
-  final String priority;
-  final String assignedTech;
-  final String status;
 }

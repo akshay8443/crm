@@ -159,12 +159,50 @@
 //   }
 // }
 
+import 'dart:async';
+
 import 'package:crm_app/features/purchase_request/view/purchase_request_screen.dart';
 import 'package:flutter/material.dart';
 import '../../service_calls/view/service_call_screen.dart';
+import '../../service_calls/viewmodel/service_call_viewmodel.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  final ServiceCallViewModel _serviceCallViewModel = ServiceCallViewModel();
+  bool _hasPrefetchedServiceData = false;
+
+  @override
+  void initState() {
+    super.initState();
+    print('DASHBOARD: initState');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _hasPrefetchedServiceData) return;
+      _hasPrefetchedServiceData = true;
+      _prefetchServiceMasterData();
+    });
+  }
+
+  Future<void> _prefetchServiceMasterData() async {
+    print('DASHBOARD: prefetch service data start');
+    try {
+      await Future.wait<void>([
+        _serviceCallViewModel.fetchContractData().then((_) {}),
+        _serviceCallViewModel.fetchProjectData().then((_) {}),
+        _serviceCallViewModel.fetchEmployeeData().then((_) {}),
+        _serviceCallViewModel.fetchProblemTypeData().then((_) {}),
+        _serviceCallViewModel.fetchProblemSubTypeData().then((_) {}),
+      ]);
+      print('DASHBOARD: prefetch service data success');
+    } catch (error) {
+      print('DASHBOARD: prefetch service data error: $error');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -265,6 +303,21 @@ class _SideMenu extends StatelessWidget {
             context,
             title: "Service Call",
             onTap: () {
+              print('DASHBOARD: Service Call menu tapped');
+              final serviceCallViewModel = ServiceCallViewModel();
+              unawaited(
+                Future.wait<void>([
+                  serviceCallViewModel.fetchContractData().then((_) {}),
+                  serviceCallViewModel.fetchProjectData().then((_) {}),
+                  serviceCallViewModel.fetchEmployeeData().then((_) {}),
+                  serviceCallViewModel.fetchProblemTypeData().then((_) {}),
+                  serviceCallViewModel.fetchProblemSubTypeData().then((_) {}),
+                ]).then((_) {
+                  print('DASHBOARD: Service APIs warmup success');
+                }).catchError((error) {
+                  print('DASHBOARD: Service APIs warmup error: $error');
+                }),
+              );
               Navigator.push(
                 context,
                 MaterialPageRoute(
