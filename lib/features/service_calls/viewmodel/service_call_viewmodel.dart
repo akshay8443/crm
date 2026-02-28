@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
@@ -468,22 +467,15 @@ class ServiceCallViewModel {
       ..fields['CustomerCode'] = normalizedCustomerCode;
 
     for (final file in files) {
-      if (kIsWeb) {
-        final bytes = await file.readAsBytes();
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'file',
-            bytes,
-            filename: file.name.isNotEmpty ? file.name : 'attachment.jpg',
-          ),
-        );
-        continue;
-      }
+      final bytes = await file.readAsBytes();
+      final resolvedName = file.name.trim().isNotEmpty
+          ? file.name.trim()
+          : _fallbackFileName(file.path);
       request.files.add(
-        await http.MultipartFile.fromPath(
+        http.MultipartFile.fromBytes(
           'file',
-          file.path,
-          filename: file.name.isNotEmpty ? file.name : null,
+          bytes,
+          filename: resolvedName,
         ),
       );
     }
@@ -519,5 +511,15 @@ class ServiceCallViewModel {
           ? message
           : 'Attachment upload failed (${streamedResponse.statusCode})',
     );
+  }
+
+  String _fallbackFileName(String path) {
+    final normalized = path.trim();
+    if (normalized.isEmpty) return 'attachment.jpg';
+    final segments = normalized.split('/');
+    final last = segments.isEmpty ? normalized : segments.last;
+    final cleaned = last.trim();
+    if (cleaned.isEmpty) return 'attachment.jpg';
+    return cleaned;
   }
 }
