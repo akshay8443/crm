@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/api_constants.dart';
 import '../viewmodel/service_call_viewmodel.dart';
 
 class ServiceCallDetailScreen extends StatefulWidget {
@@ -16,20 +17,26 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
   bool _isLoading = false;
   String? _loadError;
   Map<String, dynamic> _details = <String, dynamic>{};
+  List<Map<String, dynamic>> _attachments = <Map<String, dynamic>>[];
 
   Future<void> _loadDetails() async {
     setState(() {
       _isLoading = true;
       _loadError = null;
       _details = <String, dynamic>{};
+      _attachments = <Map<String, dynamic>>[];
     });
     try {
-      final data = await _serviceCallViewModel.fetchSpecficServiceCall(
-        widget.serviceNo,
-      );
+      final results = await Future.wait<dynamic>(<Future<dynamic>>[
+        _serviceCallViewModel.fetchSpecficServiceCall(widget.serviceNo),
+        _serviceCallViewModel.fetchServiceAttachments(widget.serviceNo),
+      ]);
+      final data = results[0] as Map<String, dynamic>;
+      final attachments = results[1] as List<Map<String, dynamic>>;
       if (!mounted) return;
       setState(() {
         _details = data;
+        _attachments = attachments;
       });
     } catch (e) {
       if (!mounted) return;
@@ -46,6 +53,103 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
         });
       }
     }
+  }
+
+  String _attachmentName(Map<String, dynamic> item) {
+    final value = (item['FileName'] ?? item['fileName'] ?? '').toString().trim();
+    return value.isEmpty ? 'Attachment' : value;
+  }
+
+  String? _attachmentUrl(Map<String, dynamic> item) {
+    final rawPath = (item['FilePath'] ?? item['filePath'] ?? '').toString().trim();
+    if (rawPath.isEmpty) return null;
+    final sanitizedPath = rawPath.replaceAll('\\', '/').replaceAll(' ', '%20');
+    if (sanitizedPath.startsWith('http://') ||
+        sanitizedPath.startsWith('https://')) {
+      return sanitizedPath;
+    }
+    final normalizedPath = sanitizedPath.startsWith('/')
+        ? sanitizedPath
+        : '/$sanitizedPath';
+    return '${ApiConstants.baseUrl}$normalizedPath';
+  }
+
+  Widget _attachmentsSection() {
+    if (_attachments.isEmpty) {
+      return _section('Attachments', <Widget>[
+        const Text('No attachments found.', style: TextStyle(color: Colors.black54)),
+      ]);
+    }
+    return _section(
+      'Attachments (${_attachments.length})',
+      _attachments.map((item) {
+        final imageUrl = _attachmentUrl(item);
+        final fileName = _attachmentName(item);
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GestureDetector(
+                onTap: imageUrl == null
+                    ? null
+                    : () => showDialog<void>(
+                          context: context,
+                          builder: (dialogContext) => Dialog(
+                            child: InteractiveViewer(
+                              child: Image.network(
+                                imageUrl,
+                                headers: const <String, String>{
+                                  'Authorization': ApiConstants.basicAuthorization,
+                                },
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                          ),
+                        ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 90,
+                    height: 90,
+                    child: imageUrl == null
+                        ? const ColoredBox(
+                            color: Color(0xFFE5E7EB),
+                            child: Icon(Icons.image_not_supported_outlined),
+                          )
+                        : Image.network(
+                            imageUrl,
+                            headers: const <String, String>{
+                              'Authorization': ApiConstants.basicAuthorization,
+                            },
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const ColoredBox(
+                                color: Color(0xFFE5E7EB),
+                                child: Icon(Icons.broken_image_outlined),
+                              );
+                            },
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    fileName,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
   }
 
   @override
@@ -156,6 +260,7 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
         _infoTile('Expense Amount', _valueFor(const ['ExpenseAmount'])),
         _infoTile('Remarks', _valueFor(const ['Remarks'])),
       ]),
+      _attachmentsSection(),
     ];
   }
 

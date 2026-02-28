@@ -1,6 +1,8 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/api_constants.dart';
 import '../model/contract_data.dart';
@@ -324,6 +326,45 @@ class ServiceCallViewModel {
     throw Exception('Get specific service call failed (${response.statusCode})');
   }
 
+  Future<List<Map<String, dynamic>>> fetchServiceAttachments(
+    String serviceNo,
+  ) async {
+    final baseUri = _buildNoCacheUri(ApiConstants.getAttachmentsPath);
+    final query = Map<String, String>.from(baseUri.queryParameters);
+    query['serviceNo'] = serviceNo.trim();
+    final uri = baseUri.replace(queryParameters: query);
+    final headers = _getHeaders();
+
+    print('GET ATTACHMENTS URL: $uri');
+    print('GET ATTACHMENTS HEADERS: $headers');
+    final response = await http
+        .get(uri, headers: headers)
+        .timeout(const Duration(seconds: 20));
+
+    print('GET ATTACHMENTS STATUS: ${response.statusCode}');
+    print('GET ATTACHMENTS RESPONSE: ${response.body}');
+
+    if (response.body.isEmpty) {
+      return <Map<String, dynamic>>[];
+    }
+
+    final dynamic decoded = jsonDecode(response.body);
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (decoded is List) {
+        return decoded.whereType<Map<String, dynamic>>().toList();
+      }
+      if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is List) {
+          return nested.whereType<Map<String, dynamic>>().toList();
+        }
+      }
+      return <Map<String, dynamic>>[];
+    }
+
+    throw Exception('Get attachments failed (${response.statusCode})');
+  }
+
   Future<Map<String, dynamic>> createServiceCall(
     ServiceCallRequest request,
   ) async {
@@ -400,6 +441,83 @@ class ServiceCallViewModel {
       message.isNotEmpty
           ? message
           : 'Create service call failed (${response.statusCode})',
+    );
+  }
+
+  Future<Map<String, dynamic>> uploadServiceAttachments({
+    required String serviceNo,
+    required String customerCode,
+    required List<XFile> files,
+  }) async {
+    final normalizedServiceNo = serviceNo.trim();
+    final normalizedCustomerCode = customerCode.trim();
+    if (normalizedServiceNo.isEmpty) {
+      throw Exception('ServiceNo is required for attachment upload');
+    }
+    if (normalizedCustomerCode.isEmpty) {
+      throw Exception('CustomerCode is required for attachment upload');
+    }
+    if (files.isEmpty) {
+      return <String, dynamic>{'message': 'No attachments selected'};
+    }
+
+    final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.uploadImagePath}');
+    final request = http.MultipartRequest('POST', uri)
+      ..headers['Authorization'] = ApiConstants.basicAuthorization
+      ..fields['ServiceNo'] = normalizedServiceNo
+      ..fields['CustomerCode'] = normalizedCustomerCode;
+
+    for (final file in files) {
+      if (kIsWeb) {
+        final bytes = await file.readAsBytes();
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            bytes,
+            filename: file.name.isNotEmpty ? file.name : 'attachment.jpg',
+          ),
+        );
+        continue;
+      }
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'file',
+          file.path,
+          filename: file.name.isNotEmpty ? file.name : null,
+        ),
+      );
+    }
+
+    print('UPLOAD IMAGE URL: $uri');
+    print('UPLOAD IMAGE FIELDS: ${request.fields}');
+    print('UPLOAD IMAGE FILE COUNT: ${request.files.length}');
+
+    final streamedResponse =
+        await request.send().timeout(const Duration(seconds: 60));
+    final responseBody = await streamedResponse.stream.bytesToString();
+
+    print('UPLOAD IMAGE STATUS: ${streamedResponse.statusCode}');
+    print('UPLOAD IMAGE RESPONSE: $responseBody');
+
+    Map<String, dynamic> responseData = <String, dynamic>{};
+    if (responseBody.isNotEmpty) {
+      final dynamic decoded = jsonDecode(responseBody);
+      if (decoded is Map<String, dynamic>) {
+        responseData = decoded;
+      } else {
+        responseData = <String, dynamic>{'data': decoded};
+      }
+    }
+
+    if (streamedResponse.statusCode >= 200 && streamedResponse.statusCode < 300) {
+      return responseData;
+    }
+
+    final message = (responseData['message'] ?? responseBody).toString().trim();
+    throw Exception(
+      message.isNotEmpty
+          ? message
+          : 'Attachment upload failed (${streamedResponse.statusCode})',
     );
   }
 }

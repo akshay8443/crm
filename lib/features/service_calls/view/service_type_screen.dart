@@ -1438,27 +1438,51 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                                               crossAxisAlignment:
                                                   CrossAxisAlignment.start,
                                               children: [
-                                                _attachmentPreview(file),
-                                                const SizedBox(width: 10),
                                                 Expanded(
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                      top: 4,
-                                                    ),
-                                                    child: Text(
-                                                      _fileName(file.path),
-                                                      maxLines: 2,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
+                                                  child: InkWell(
+                                                    onTap: () =>
+                                                        _viewAttachment(file),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
+                                                    child: Row(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        _attachmentPreview(
+                                                            file),
+                                                        const SizedBox(
+                                                            width: 10),
+                                                        Expanded(
+                                                          child: Padding(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .only(
+                                                              top: 4,
+                                                            ),
+                                                            child: Text(
+                                                              _fileName(
+                                                                file.path,
+                                                              ),
+                                                              maxLines: 2,
+                                                              overflow:
+                                                                  TextOverflow
+                                                                      .ellipsis,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ),
                                                   ),
                                                 ),
                                                 IconButton(
-                                                  icon: const Icon(Icons.close),
+                                                  icon:
+                                                      const Icon(Icons.close),
                                                   onPressed: () {
                                                     setState(() {
-                                                      _attachments.remove(file);
+                                                      _attachments
+                                                          .remove(file);
                                                     });
                                                   },
                                                 ),
@@ -1810,6 +1834,64 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     );
   }
 
+  Future<void> _viewAttachment(XFile file) async {
+    _safeUnfocus();
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        const bgColor = Color(0xFF111827);
+        return Dialog(
+          backgroundColor: bgColor,
+          insetPadding: const EdgeInsets.all(16),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: InteractiveViewer(
+                  minScale: 0.8,
+                  maxScale: 4.0,
+                  child: Center(
+                    child: kIsWeb
+                        ? Image.network(
+                            file.path,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.broken_image_outlined,
+                                color: Colors.white70,
+                                size: 48,
+                              );
+                            },
+                          )
+                        : Image.file(
+                            File(file.path),
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.broken_image_outlined,
+                                color: Colors.white70,
+                                size: 48,
+                              );
+                            },
+                          ),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 8,
+                top: 8,
+                child: IconButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  icon: const Icon(Icons.close, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _attachmentPreview(XFile file) {
     const previewSize = 100.0;
     final fallback = Container(
@@ -2077,16 +2159,53 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     try {
       print('SERVICE CALL API CALL START');
       final response = await _serviceCallViewModel.createServiceCall(request);
-      print('SERVICE CALL API CALL SUCCESS: $response');
-      if (!mounted) return;
+      print('SERVICE CALL API CALL SUCCESS [UPLOAD FLOW V2]: $response');
       final message = (response['message'] ?? 'Service Call Submitted')
           .toString();
+      final serviceNo =
+          (response['serviceNo'] ??
+                  response['ServiceNo'] ??
+                  response['serviceNO'] ??
+                  request.serviceNo)
+              .toString()
+              .trim();
+      final resolvedServiceNo = serviceNo.isNotEmpty
+          ? serviceNo
+          : request.serviceNo.trim();
+      String attachmentMessage = '';
+      final attachmentFiles = List<XFile>.from(_attachments);
+      print(
+        'SERVICE CALL ATTACHMENT COUNT [UPLOAD FLOW V2]: ${attachmentFiles.length}',
+      );
+      if (attachmentFiles.isNotEmpty) {
+        try {
+          print('UPLOAD IMAGE CALL START [UPLOAD FLOW V2]');
+          await _serviceCallViewModel.uploadServiceAttachments(
+            serviceNo: resolvedServiceNo,
+            customerCode: request.customerCode,
+            files: attachmentFiles,
+          );
+          print('UPLOAD IMAGE CALL SUCCESS [UPLOAD FLOW V2]');
+          attachmentMessage =
+              '\nAttachments uploaded: ${attachmentFiles.length} file(s)';
+        } catch (e) {
+          print('UPLOAD IMAGE CALL ERROR [UPLOAD FLOW V2]: $e');
+          attachmentMessage =
+              '\nService created, but attachment upload failed: $e';
+        }
+      } else {
+        print('UPLOAD IMAGE SKIPPED [UPLOAD FLOW V2]: no attachments selected');
+      }
+      final successMessage = resolvedServiceNo.isEmpty
+          ? '$message$attachmentMessage'
+          : '$message\nService No: $resolvedServiceNo$attachmentMessage';
+      if (!mounted) return;
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) => AlertDialog(
           title: const Text('Success'),
-          content: Text(message),
+          content: Text(successMessage),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
