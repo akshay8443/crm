@@ -77,7 +77,6 @@
 //   }
 // }
 
-
 // class _SideMenu extends StatelessWidget {
 //   const _SideMenu();
 
@@ -161,7 +160,7 @@
 
 import 'dart:async';
 
-import 'package:crm_app/features/purchase_request/view/purchase_request_screen.dart';
+import 'package:crm_app/features/purchase_request/view/purchase_request_options_screen.dart';
 import 'package:flutter/material.dart';
 import '../../service_calls/view/service_call_screen.dart';
 import '../../service_calls/viewmodel/service_call_viewmodel.dart';
@@ -216,12 +215,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: ElevatedButton(
               onPressed: () {
                 // ✅ PROPER LOGOUT
-                Navigator.of(context, rootNavigator: true)
-                    .pushNamedAndRemoveUntil('/', (route) => false);
+                Navigator.of(
+                  context,
+                  rootNavigator: true,
+                ).pushNamedAndRemoveUntil('/', (route) => false);
               },
               child: const Text("Logout"),
             ),
-          )
+          ),
         ],
       ),
       body: Container(
@@ -241,9 +242,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _dashboardCard() {
     return Card(
       margin: const EdgeInsets.all(20),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -278,6 +277,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
+
 class _SideMenu extends StatelessWidget {
   const _SideMenu();
 
@@ -302,15 +302,18 @@ class _SideMenu extends StatelessWidget {
             ),
           ),
 
-          _menuItem(context, title: "Purchase Request", onTap: () {
-            Navigator.push(
-  context,
-  MaterialPageRoute(
-    builder: (_) => const PurchaseRequestScreen(),
-  ),
-);
-
-          }),
+          _menuItem(
+            context,
+            title: "Purchase Request",
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const PurchaseRequestOptionsScreen(),
+                ),
+              );
+            },
+          ),
           _menuItem(context, title: "Inventory Transfer Request", onTap: () {}),
           _menuItem(
             context,
@@ -320,22 +323,24 @@ class _SideMenu extends StatelessWidget {
               final serviceCallViewModel = ServiceCallViewModel();
               unawaited(
                 Future.wait<void>([
-                  serviceCallViewModel.fetchContractData().then((_) {}),
-                  serviceCallViewModel.fetchProjectData().then((_) {}),
-                  serviceCallViewModel.fetchEmployeeData().then((_) {}),
-                  serviceCallViewModel.fetchProblemTypeData().then((_) {}),
-                  serviceCallViewModel.fetchProblemSubTypeData().then((_) {}),
-                ]).then((_) {
-                  print('DASHBOARD: Service APIs warmup success');
-                }).catchError((error) {
-                  print('DASHBOARD: Service APIs warmup error: $error');
-                }),
+                      serviceCallViewModel.fetchContractData().then((_) {}),
+                      serviceCallViewModel.fetchProjectData().then((_) {}),
+                      serviceCallViewModel.fetchEmployeeData().then((_) {}),
+                      serviceCallViewModel.fetchProblemTypeData().then((_) {}),
+                      serviceCallViewModel.fetchProblemSubTypeData().then(
+                        (_) {},
+                      ),
+                    ])
+                    .then((_) {
+                      print('DASHBOARD: Service APIs warmup success');
+                    })
+                    .catchError((error) {
+                      print('DASHBOARD: Service APIs warmup error: $error');
+                    }),
               );
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const ServiceCallScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const ServiceCallScreen()),
               );
             },
           ),

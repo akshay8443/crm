@@ -1,5 +1,12 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+
+import '../../../core/constants/api_constants.dart';
+import 'purchase_request_static_data.dart';
 
 class PurchaseRequestScreen extends StatefulWidget {
   const PurchaseRequestScreen({super.key});
@@ -10,9 +17,7 @@ class PurchaseRequestScreen extends StatefulWidget {
 
 class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
   final ImagePicker _imagePicker = ImagePicker();
-  final List<_PurchaseItem> items = [
-    _PurchaseItem(),
-  ];
+  final List<_PurchaseItem> items = [_PurchaseItem()];
   final List<XFile> _attachments = [];
 
   final _requesterNameController = TextEditingController(text: 'Manu');
@@ -20,31 +25,765 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
   final _reqDepartmentController = TextEditingController();
   final _reqToController = TextEditingController();
 
-  final _docNoController = TextEditingController(text: 'PR-20260312');
-  final _docDateController = TextEditingController(text: '2026-03-12');
+  final _docNoController = TextEditingController(text: 'PR-000028');
+  final _docDateController = TextEditingController(text: '2026-03-22');
+  final _requiredDateController = TextEditingController();
+  final _validUntilController = TextEditingController();
   final _amendmentDateController = TextEditingController();
+  final _remarksController = TextEditingController();
+  final _importantNoteController = TextEditingController();
+  final _explanationController = TextEditingController();
   final _shipToController = TextEditingController();
   final _serviceCallController = TextEditingController();
   final _salesOrderController = TextEditingController();
 
-  String? _replacementReason;
+  String? _requirementType = 'Select Type';
   String? _responsibleDepartment;
-  String? _privateClient;
-  String? _priority;
+  String? _natureOfProcurement = 'Select Type';
+  String? _privateClient = 'Select Option';
+  String? _priority = 'Select Priority';
+  String? _requesterName;
+  String? _ownerName;
+  String? _requisitionToDepartment;
+  String? _requisitionTo;
+  List<String> _purchaseEmployeeOptions = const [];
+  List<_CodeNameOption> _purchaseItemOptions = const [];
+  List<_CodeNameOption> _warehouseOptions = const [];
+  List<_CodeNameOption> _projectOptions = const [];
+  List<_SalesOrderOption> _salesOrderOptions = const [];
+  List<_CodeNameOption> _serviceCallOptions = const [];
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPurchaseEmployees();
+    _fetchPurchaseItems();
+    _fetchPurchaseWarehouses();
+    _fetchPurchaseProjects();
+    _fetchPurchaseSalesOrders();
+    _fetchPurchaseServiceCalls();
+  }
 
   @override
   void dispose() {
+    for (final item in items) {
+      item.dispose();
+    }
     _requesterNameController.dispose();
     _ownerNameController.dispose();
     _reqDepartmentController.dispose();
     _reqToController.dispose();
     _docNoController.dispose();
     _docDateController.dispose();
+    _requiredDateController.dispose();
+    _validUntilController.dispose();
     _amendmentDateController.dispose();
+    _remarksController.dispose();
+    _importantNoteController.dispose();
+    _explanationController.dispose();
     _shipToController.dispose();
     _serviceCallController.dispose();
     _salesOrderController.dispose();
     super.dispose();
+  }
+
+  Uri _buildNoCacheUri(String path) {
+    final uri = Uri.parse('${ApiConstants.baseUrl}$path');
+    final params = Map<String, String>.from(uri.queryParameters);
+    params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
+    return uri.replace(queryParameters: params);
+  }
+
+  Map<String, String> _getHeaders() {
+    return <String, String>{
+      'Accept': 'application/json',
+      'Authorization': ApiConstants.basicAuthorization,
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+    };
+  }
+
+  Future<void> _fetchPurchaseEmployees() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getPurchaseEmployeePath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'Get purchase employee failed (${response.statusCode})',
+        );
+      }
+
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from purchase employee API');
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid purchase employee response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid purchase employee response format');
+      }
+
+      final options = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) {
+          continue;
+        }
+        final employeeNo = _readValue(row, <String>['EmployeeNo', 'EmpNo']);
+        final firstName = _readValue(row, <String>['FirstName', 'firstName']);
+        final middleName = _readValue(row, <String>[
+          'MiddleName',
+          'middleName',
+        ]);
+        final lastName = _readValue(row, <String>['LastName', 'lastName']);
+
+        final fullName = [
+          firstName,
+          middleName,
+          lastName,
+        ].where((part) => part.isNotEmpty).join(' ');
+        final label = employeeNo.isNotEmpty
+            ? '$employeeNo - $fullName'
+            : fullName;
+        if (label.trim().isNotEmpty) {
+          options.add(label.trim());
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _purchaseEmployeeOptions = options.toList();
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load employee list')),
+      );
+    }
+  }
+
+  Future<void> _fetchPurchaseItems() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getPurchaseItemPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Get purchase item failed (${response.statusCode})');
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from purchase item API');
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid purchase item response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid purchase item response format');
+      }
+
+      final options = <_CodeNameOption>[];
+      final unique = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) {
+          continue;
+        }
+        final code = _readValue(row, <String>[
+          'ItemCode',
+          'ItemNo',
+          'ItemID',
+          'ItemId',
+        ]);
+        final description = _readValue(row, <String>[
+          'ItemDescription',
+          'Description',
+          'ItemName',
+          'Name',
+          'ItemDesc',
+        ]);
+        final key = '${code.toLowerCase()}|${description.toLowerCase()}';
+        if (code.isEmpty || unique.contains(key)) {
+          continue;
+        }
+        unique.add(key);
+        options.add(_CodeNameOption(code: code, name: description));
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _purchaseItemOptions = options;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load purchase item list')),
+      );
+    }
+  }
+
+  Future<void> _fetchPurchaseWarehouses() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getPurchaseWarehousePath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'Get purchase warehouse failed (${response.statusCode})',
+        );
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from purchase warehouse API');
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid purchase warehouse response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid purchase warehouse response format');
+      }
+
+      final options = <_CodeNameOption>[];
+      final unique = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) {
+          continue;
+        }
+        final code = _readValue(row, <String>[
+          'WarehouseCode',
+          'WhsCode',
+          'Code',
+          'Warehouse',
+        ]);
+        final name = _readValue(row, <String>[
+          'WarehouseName',
+          'WhsName',
+          'Name',
+          'Description',
+        ]);
+        final key = '${code.toLowerCase()}|${name.toLowerCase()}';
+        if (code.isEmpty || unique.contains(key)) {
+          continue;
+        }
+        unique.add(key);
+        options.add(_CodeNameOption(code: code, name: name));
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _warehouseOptions = options;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load warehouse list')),
+      );
+    }
+  }
+
+  Future<void> _fetchPurchaseProjects() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getPurchaseProjectPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Get purchase project failed (${response.statusCode})');
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from purchase project API');
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid purchase project response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid purchase project response format');
+      }
+
+      final options = <_CodeNameOption>[];
+      final unique = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) {
+          continue;
+        }
+        final code = _readValue(row, <String>[
+          'Projectcode',
+          'ProjectCode',
+          'Code',
+          'ProjectNo',
+        ]);
+        final name = _readValue(row, <String>[
+          'ProjectName',
+          'Name',
+          'Description',
+          'ProjectDesc',
+        ]);
+        final key = '${code.toLowerCase()}|${name.toLowerCase()}';
+        if (code.isEmpty || unique.contains(key)) {
+          continue;
+        }
+        unique.add(key);
+        options.add(_CodeNameOption(code: code, name: name));
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _projectOptions = options;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load project list')),
+      );
+    }
+  }
+
+  Future<void> _fetchPurchaseSalesOrders() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getPurchaseSalesOrderNoPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'Get purchase sales order failed (${response.statusCode})',
+        );
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from purchase sales order API');
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid purchase sales order response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid purchase sales order response format');
+      }
+
+      final options = <_SalesOrderOption>[];
+      final unique = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) continue;
+        final soNo = _readValue(row, <String>['SONo', 'SoNo', 'SO', 'OrderNo']);
+        final customer = _readValue(row, <String>[
+          'Customer',
+          'CardName',
+          'CustomerName',
+          'Name',
+        ]);
+        final soDate = _readValue(row, <String>[
+          'SODate',
+          'SoDate',
+          'DocDate',
+          'Date',
+        ]);
+
+        if (soNo.isEmpty) continue;
+        final key =
+            '${soNo.toLowerCase()}|${customer.toLowerCase()}|${soDate.toLowerCase()}';
+        if (unique.contains(key)) continue;
+        unique.add(key);
+        options.add(
+          _SalesOrderOption(soNo: soNo, customer: customer, soDate: soDate),
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _salesOrderOptions = options;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load sales order list')),
+      );
+    }
+  }
+
+  Future<void> _fetchPurchaseServiceCalls() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getPurchaseServiceCallNoPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'Get purchase service call no failed (${response.statusCode})',
+        );
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from purchase service call no API');
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid purchase service call response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid purchase service call response format');
+      }
+
+      final options = <_CodeNameOption>[];
+      final unique = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) continue;
+        final serviceCallNo = _readValue(row, <String>[
+          'ServicecallNo',
+          'ServiceCallNo',
+          'serviceCallNo',
+          'ServiceNo',
+        ]);
+        final businessPartner = _readValue(row, <String>[
+          'BusinessPartner',
+          'BUsinessPartner',
+          'businessPartner',
+          'BPName',
+          'Customer',
+          'CardName',
+        ]);
+        if (serviceCallNo.isEmpty) continue;
+        final key =
+            '${serviceCallNo.toLowerCase()}|${businessPartner.toLowerCase()}';
+        if (unique.contains(key)) continue;
+        unique.add(key);
+        options.add(
+          _CodeNameOption(code: serviceCallNo, name: businessPartner),
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _serviceCallOptions = options;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load service call list')),
+      );
+    }
+  }
+
+  Future<void> _openItemPicker(_PurchaseItem item) async {
+    if (_purchaseItemOptions.isEmpty) {
+      await _fetchPurchaseItems();
+    }
+    if (!mounted) return;
+    final selected = await _openCodeNamePicker(
+      options: _purchaseItemOptions,
+      searchHint: 'Search ItemCode / Description',
+      emptyText: 'No item found',
+    );
+
+    if (!mounted || selected == null) {
+      return;
+    }
+
+    setState(() {
+      item.itemCode = selected.code;
+      item.itemCodeController.text = selected.code;
+      item.descriptionController.text = selected.name;
+    });
+  }
+
+  Future<void> _openWarehousePicker(_PurchaseItem item) async {
+    if (_warehouseOptions.isEmpty) {
+      await _fetchPurchaseWarehouses();
+    }
+    if (!mounted) return;
+
+    final selected = await _openCodeNamePicker(
+      options: _warehouseOptions,
+      searchHint: 'Search WarehouseCode / Name',
+      emptyText: 'No warehouse found',
+    );
+    if (!mounted || selected == null) return;
+
+    setState(() {
+      item.warehouse = selected.code;
+      item.warehouseCodeController.text = selected.code;
+    });
+  }
+
+  Future<void> _openProjectPicker(_PurchaseItem item) async {
+    if (_projectOptions.isEmpty) {
+      await _fetchPurchaseProjects();
+    }
+    if (!mounted) return;
+
+    final selected = await _openCodeNamePicker(
+      options: _projectOptions,
+      searchHint: 'Search ProjectCode / Name',
+      emptyText: 'No project found',
+    );
+    if (!mounted || selected == null) return;
+
+    setState(() {
+      item.projectCode = selected.code;
+      item.projectCodeController.text = selected.code;
+    });
+  }
+
+  Future<void> _openSalesOrderPicker() async {
+    if (_salesOrderOptions.isEmpty) {
+      await _fetchPurchaseSalesOrders();
+    }
+    if (!mounted) return;
+
+    final selected = await showModalBottomSheet<_SalesOrderOption>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filtered = _salesOrderOptions.where((option) {
+              final q = query.trim().toLowerCase();
+              if (q.isEmpty) return true;
+              return option.soNo.toLowerCase().contains(q) ||
+                  option.customer.toLowerCase().contains(q) ||
+                  option.soDate.toLowerCase().contains(q) ||
+                  option.displayLabel.toLowerCase().contains(q);
+            }).toList();
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 12,
+                  bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 12,
+                ),
+                child: SizedBox(
+                  height: 420,
+                  child: Column(
+                    children: [
+                      TextField(
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: 'Search SONo / Customer / SODate',
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          fillColor: const Color(0xFFFBFBFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFD7DCE4),
+                            ),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          setModalState(() {
+                            query = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: filtered.isEmpty
+                            ? const Center(child: Text('No sales order found'))
+                            : ListView.separated(
+                                itemCount: filtered.length,
+                                separatorBuilder: (_, _) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final option = filtered[index];
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(option.displayLabel),
+                                    onTap: () =>
+                                        Navigator.pop(sheetContext, option),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted || selected == null) return;
+    setState(() {
+      _salesOrderController.text = selected.displayLabel;
+    });
+  }
+
+  Future<void> _openServiceCallPicker() async {
+    if (_serviceCallOptions.isEmpty) {
+      await _fetchPurchaseServiceCalls();
+    }
+    if (!mounted) return;
+
+    final selected = await _openCodeNamePicker(
+      options: _serviceCallOptions,
+      searchHint: 'Search ServiceCallNo / BusinessPartner',
+      emptyText: 'No service call found',
+    );
+    if (!mounted || selected == null) return;
+
+    setState(() {
+      _serviceCallController.text = selected.displayLabel;
+    });
+  }
+
+  Future<_CodeNameOption?> _openCodeNamePicker({
+    required List<_CodeNameOption> options,
+    required String searchHint,
+    required String emptyText,
+  }) async {
+    return showModalBottomSheet<_CodeNameOption>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filtered = options.where((option) {
+              final q = query.trim().toLowerCase();
+              if (q.isEmpty) return true;
+              return option.code.toLowerCase().contains(q) ||
+                  option.name.toLowerCase().contains(q) ||
+                  option.displayLabel.toLowerCase().contains(q);
+            }).toList();
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 12,
+                  bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 12,
+                ),
+                child: SizedBox(
+                  height: 420,
+                  child: Column(
+                    children: [
+                      TextField(
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: searchHint,
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          fillColor: const Color(0xFFFBFBFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFD7DCE4),
+                            ),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          setModalState(() {
+                            query = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: filtered.isEmpty
+                            ? Center(child: Text(emptyText))
+                            : ListView.separated(
+                                itemCount: filtered.length,
+                                separatorBuilder: (_, _) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final option = filtered[index];
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(option.displayLabel),
+                                    onTap: () =>
+                                        Navigator.pop(sheetContext, option),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _readValue(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key];
+      if (value != null) {
+        final normalized = value.toString().trim();
+        if (normalized.isNotEmpty) {
+          return normalized;
+        }
+      }
+    }
+    return '';
   }
 
   @override
@@ -84,7 +823,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 8, top: 10, bottom: 10),
             child: FilledButton(
-              onPressed: () {},
+              onPressed: _isSubmitting ? null : _validateAndSubmit,
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF1E69F2),
                 foregroundColor: Colors.white,
@@ -92,7 +831,16 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const Text('Save & Submit'),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Save & Submit'),
             ),
           ),
         ],
@@ -115,12 +863,16 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
                   if (isMobile) ...[
                     _buildRequesterDetailsCard(),
                     const SizedBox(height: 12),
+                    _buildServiceDetailsCard(),
+                    const SizedBox(height: 12),
                     _buildDocumentInfoCard(),
                   ] else
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(child: _buildRequesterDetailsCard()),
+                        const SizedBox(width: 16),
+                        Expanded(child: _buildServiceDetailsCard()),
                         const SizedBox(width: 16),
                         Expanded(child: _buildDocumentInfoCard()),
                       ],
@@ -136,6 +888,235 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _validateAndSubmit() async {
+    final errors = <String>[];
+
+    if (_requesterNameController.text.trim().isEmpty) {
+      errors.add('Requester is required');
+    }
+    if (_ownerNameController.text.trim().isEmpty) {
+      errors.add('Owner is required');
+    }
+    if (_reqToController.text.trim().isEmpty) {
+      errors.add('Requisition To is required');
+    }
+    if (_serviceCallController.text.trim().isEmpty) {
+      errors.add('Service Call is required');
+    }
+    if ((_responsibleDepartment ?? '').trim().isEmpty) {
+      errors.add('Department is required');
+    }
+    if (_requiredDateController.text.trim().isEmpty) {
+      errors.add('Required Date is required');
+    }
+
+    for (int i = 0; i < items.length; i++) {
+      final row = items[i];
+      final rowNo = i + 1;
+
+      if (row.itemCodeController.text.trim().isEmpty) {
+        errors.add('Row $rowNo: Item is required');
+      }
+
+      final qty = double.tryParse(row.qtyController.text.trim());
+      if (qty == null || qty <= 0) {
+        errors.add('Row $rowNo: Qty must be > 0');
+      }
+
+      if (row.warehouseCodeController.text.trim().isEmpty) {
+        errors.add('Row $rowNo: Warehouse required');
+      }
+
+      if (row.projectCodeController.text.trim().isEmpty) {
+        errors.add('Row $rowNo: Project required');
+      }
+    }
+
+    if (errors.isNotEmpty) {
+      await _showValidationErrors(errors);
+      return;
+    }
+
+    await _submitPurchaseRequest();
+  }
+
+  Future<void> _showValidationErrors(List<String> errors) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 14,
+              bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Please fix these errors',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 10),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 300),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: errors.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 6),
+                    itemBuilder: (_, index) => Text(
+                      '• ${errors[index]}',
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: const Text('OK'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _submitPurchaseRequest() async {
+    final payload = <String, dynamic>{
+      'DocNo': _docNoController.text.trim(),
+      'DocDate': _toApiDate(_docDateController.text.trim()),
+      'RequiredDate': _toApiDate(_requiredDateController.text.trim()),
+      'ValidUntil': _toApiDate(_validUntilController.text.trim()),
+      'AmendmentDate': _toApiDate(_amendmentDateController.text.trim()),
+      'Requester': _requesterNameController.text.trim(),
+      'Owner': _ownerNameController.text.trim(),
+      'ReqToDept': _requisitionToDepartment ?? '',
+      'ReqTo': _reqToController.text.trim(),
+      'RequirementType': _requirementType ?? '',
+      'ReplacementExplanation': _explanationController.text.trim().isEmpty
+          ? 'NA'
+          : _explanationController.text.trim(),
+      'ServiceCallNo': _extractLeadingCode(_serviceCallController.text.trim()),
+      'SalesOrderNo': _extractLeadingCode(_salesOrderController.text.trim()),
+      'ResponsibleDept': _responsibleDepartment ?? '',
+      'Priority': _priority ?? '',
+      'NatureOfProcurement': _natureOfProcurement ?? '',
+      'PrivateClient': _privateClient ?? '',
+      'ShipTo': _shipToController.text.trim(),
+      'Remarks': _remarksController.text.trim(),
+      'ImportantNote': _importantNoteController.text.trim(),
+      'Lines': items
+          .map(
+            (row) => <String, dynamic>{
+              'ItemCode': row.itemCodeController.text.trim(),
+              'ItemDescription': row.descriptionController.text.trim(),
+              'ItemDetails': row.detailsController.text.trim(),
+              'Qty': double.tryParse(row.qtyController.text.trim()) ?? 0,
+              'Warehouse': row.warehouseCodeController.text.trim(),
+              'ProjectCode': row.projectCodeController.text.trim(),
+            },
+          )
+          .toList(),
+    };
+
+    setState(() {
+      _isSubmitting = true;
+    });
+    try {
+      final uri = Uri.parse(
+        '${ApiConstants.baseUrl}${ApiConstants.createPurchaseRequestPath}',
+      );
+      final response = await http
+          .post(
+            uri,
+            headers: <String, String>{
+              ..._getHeaders(),
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      final body = response.body;
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Submit failed (${response.statusCode})');
+      }
+
+      String message = 'Purchase Request submitted successfully';
+      if (body.isNotEmpty) {
+        final decoded = jsonDecode(body);
+        if (decoded is Map<String, dynamic>) {
+          final serverMessage = decoded['message']?.toString().trim();
+          if (serverMessage != null && serverMessage.isNotEmpty) {
+            message = serverMessage;
+          }
+        }
+      }
+
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Success'),
+            content: Text(message),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Submit failed: $error')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  String _extractLeadingCode(String input) {
+    final value = input.trim();
+    if (value.isEmpty) return '';
+    final separatorIndex = value.indexOf(' - ');
+    if (separatorIndex <= 0) return value;
+    return value.substring(0, separatorIndex).trim();
+  }
+
+  String _toApiDate(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return '';
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(text)) {
+      return text;
+    }
+    final match = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(text);
+    if (match == null) return text;
+    final day = match.group(1)!;
+    final month = match.group(2)!;
+    final year = match.group(3)!;
+    return '$year-$month-$day';
   }
 
   Future<void> _openUploadOptions() async {
@@ -188,9 +1169,9 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to open camera')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Unable to open camera')));
     }
   }
 
@@ -219,13 +1200,165 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       title: 'Requester Details',
       child: Column(
         children: [
-          _labelField('Requester Name', _requesterNameController),
+          _dropdownField(
+            label: 'Requester Name',
+            value: _requesterName,
+            items: _purchaseEmployeeOptions,
+            onChanged: (value) => setState(() {
+              _requesterName = value;
+              _requesterNameController.text = value ?? '';
+            }),
+            hint: 'Search Requester Name',
+          ),
           const SizedBox(height: 10),
-          _labelField('Owner Name', _ownerNameController),
+          _dropdownField(
+            label: 'Owner Name',
+            value: _ownerName,
+            items: _purchaseEmployeeOptions,
+            onChanged: (value) => setState(() {
+              _ownerName = value;
+              _ownerNameController.text = value ?? '';
+            }),
+            hint: 'Search Owner Name',
+          ),
           const SizedBox(height: 10),
-          _labelField('Requisition To Department', _reqDepartmentController),
+          _dropdownField(
+            label: 'Requisition To Department',
+            value: _requisitionToDepartment,
+            items: const ['IT', 'Engineering', 'Support', 'R&D'],
+            onChanged: (value) => setState(() {
+              _requisitionToDepartment = value;
+              _reqDepartmentController.text = value ?? '';
+            }),
+            hint: 'Select Type',
+          ),
           const SizedBox(height: 10),
-          _labelField('Requisition To', _reqToController),
+          _dropdownField(
+            label: 'Requisition To',
+            value: _requisitionTo,
+            items: _purchaseEmployeeOptions,
+            onChanged: (value) => setState(() {
+              _requisitionTo = value;
+              _reqToController.text = value ?? '';
+            }),
+            hint: 'Search Requester Name',
+          ),
+          const SizedBox(height: 10),
+          _dropdownField(
+            label: 'Requirement Type',
+            value: _requirementType,
+            items: const ['Select Type', 'New Rquirement', 'Replacement'],
+            onChanged: (value) => setState(() => _requirementType = value),
+            hint: 'Select Type',
+          ),
+          const SizedBox(height: 10),
+          _labelField(
+            'Explanation for Replacement',
+            _explanationController,
+            maxLines: 3,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildServiceDetailsCard() {
+    return _sectionCard(
+      title: 'Service Details',
+      child: Column(
+        children: [
+          TextField(
+            controller: _serviceCallController,
+            readOnly: true,
+            decoration: InputDecoration(
+              labelText: 'Service Call No',
+              hintText: 'Search ServiceCallNo / BP',
+              filled: true,
+              fillColor: const Color(0xFFFBFBFC),
+              suffixIcon: const Icon(Icons.arrow_drop_down),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+              ),
+            ),
+            onTap: _openServiceCallPicker,
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _salesOrderController,
+            readOnly: true,
+            decoration: InputDecoration(
+              labelText: 'Sales Order No',
+              hintText: 'Search Sales Order',
+              filled: true,
+              fillColor: const Color(0xFFFBFBFC),
+              suffixIcon: const Icon(Icons.arrow_drop_down),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+              ),
+            ),
+            onTap: _openSalesOrderPicker,
+          ),
+          const SizedBox(height: 10),
+          _dropdownField(
+            label: 'Responsible Department',
+            value: _responsibleDepartment,
+            items: kDepartmentOptions,
+            onChanged: (value) =>
+                setState(() => _responsibleDepartment = value),
+            hint: 'Select Department',
+          ),
+          const SizedBox(height: 10),
+          _dropdownField(
+            label: 'Priority',
+            value: _priority,
+            items: const ['Select Priority', 'High', 'Low', 'Medium', 'Urgent'],
+            onChanged: (value) => setState(() => _priority = value),
+            hint: 'Select Priority',
+          ),
+          const SizedBox(height: 10),
+          _dropdownField(
+            label: 'Nature of Procurement',
+            value: _natureOfProcurement,
+            items: const [
+              'Select Type',
+              'Existing Project',
+              'AddOn Project',
+              'CAMC',
+              'Repair',
+              'Internal Office Use',
+              'Upgradation',
+            ],
+            onChanged: (value) => setState(() => _natureOfProcurement = value),
+            hint: 'Select Type',
+          ),
+          const SizedBox(height: 10),
+          _dropdownField(
+            label: 'Private Client',
+            value: _privateClient,
+            items: const ['Select Option', 'Yes', 'No'],
+            onChanged: (value) => setState(() => _privateClient = value),
+            hint: 'Select Option',
+          ),
+          const SizedBox(height: 10),
+          _labelField('Ship To', _shipToController),
         ],
       ),
     );
@@ -236,63 +1369,19 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       title: 'Document Info',
       child: Column(
         children: [
-          _twoCol(
-            _labelField('Doc No', _docNoController),
-            _labelField('Doc Date', _docDateController),
-          ),
+          _labelField('Doc No', _docNoController, readOnly: true),
           const SizedBox(height: 10),
-          _twoCol(
-            _dateField('Amendment Date', _amendmentDateController),
-            _dropdownField(
-              label: 'Requirement Type',
-              value: null,
-              items: const ['Purchase', 'Replacement'],
-              onChanged: (_) {},
-              hint: 'Select Type',
-            ),
-          ),
+          _labelField('Doc Date', _docDateController, readOnly: true),
           const SizedBox(height: 10),
-          _twoCol(
-            _dropdownField(
-              label: 'Explanation for Replacement',
-              value: _replacementReason,
-              items: const ['Breakdown', 'Upgrade', 'Warranty'],
-              onChanged: (value) => setState(() => _replacementReason = value),
-              hint: 'Select Reason',
-            ),
-            _dropdownField(
-              label: 'Responsible Department',
-              value: _responsibleDepartment,
-              items: const ['IT', 'Operations', 'Service'],
-              onChanged: (value) =>
-                  setState(() => _responsibleDepartment = value),
-              hint: 'Select Department',
-            ),
-          ),
+          _dateField('Required Date', _requiredDateController),
           const SizedBox(height: 10),
-          _twoCol(
-            _labelField('Ship To', _shipToController),
-            _dropdownField(
-              label: 'Private Client',
-              value: _privateClient,
-              items: const ['Yes', 'No'],
-              onChanged: (value) => setState(() => _privateClient = value),
-              hint: 'Select Option',
-            ),
-          ),
+          _dateField('Valid Until', _validUntilController),
           const SizedBox(height: 10),
-          _twoCol(
-            _dropdownField(
-              label: 'Priority',
-              value: _priority,
-              items: const ['Low', 'Medium', 'High'],
-              onChanged: (value) => setState(() => _priority = value),
-              hint: 'Select Priority',
-            ),
-            _labelField('Service Call No', _serviceCallController),
-          ),
+          _dateField('Amendment Date', _amendmentDateController),
           const SizedBox(height: 10),
-          _labelField('Sales Order No', _salesOrderController),
+          _labelField('Remarks', _remarksController, maxLines: 3),
+          const SizedBox(height: 10),
+          _labelField('Important Note', _importantNoteController, maxLines: 3),
         ],
       ),
     );
@@ -304,61 +1393,70 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       fontWeight: FontWeight.w700,
       color: const Color(0xFF6C7684),
     );
+    const tableMinWidth = 1360.0;
 
     return _sectionCard(
       title: 'Items',
       child: Column(
         children: [
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0F3F7),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-            child: Row(
-              children: [
-                SizedBox(width: 24, child: Text('#', style: headerStyle)),
-                Expanded(flex: 2, child: Text('ITEM', style: headerStyle)),
-                Expanded(child: Text('ITEMCODE', style: headerStyle)),
-                Expanded(child: Text('ITEMDETAILS', style: headerStyle)),
-                Expanded(child: Text('WAREHOUSE', style: headerStyle)),
-                Expanded(child: Text('PROJECTCODE', style: headerStyle)),
-                SizedBox(width: 58, child: Text('QTY', style: headerStyle)),
-                SizedBox(width: 36, child: Text('ACT', style: headerStyle)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          ...List.generate(
-            items.length,
-            (index) => _itemRow(index + 1, items[index], isMobile),
-          ),
-          const SizedBox(height: 8),
-          InkWell(
-            onTap: () {
-              setState(() {
-                items.add(_PurchaseItem());
-              });
-            },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 11),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: const Color(0xFF8FB2E9),
-                  style: BorderStyle.solid,
-                ),
-              ),
-              child: const Center(
-                child: Text(
-                  'Add Item',
-                  style: TextStyle(
-                    color: Color(0xFF143A78),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 17,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: tableMinWidth),
+              child: Column(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F3F7),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 32,
+                          child: Text('#', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 250,
+                          child: Text('ITEMCODE', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 330,
+                          child: Text('ITEM DESCRIPTION', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 300,
+                          child: Text('ITEM DETAILS', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 170,
+                          child: Text('QTY', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 240,
+                          child: Text('WAREHOUSE', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 220,
+                          child: Text('PROJECTCODE', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 90,
+                          child: Text('ACT', style: headerStyle),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 6),
+                  ...List.generate(
+                    items.length,
+                    (index) => _itemRow(index + 1, items[index], isMobile),
+                  ),
+                ],
               ),
             ),
           ),
@@ -384,7 +1482,8 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
               style: BorderStyle.solid,
             ),
           ),
-          child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -412,12 +1511,96 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 96,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _attachments.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 10),
+                      itemBuilder: (context, index) {
+                        final file = _attachments[index];
+                        return GestureDetector(
+                          onTap: () => _openAttachmentPreview(file),
+                          child: Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: SizedBox(
+                                  width: 96,
+                                  height: 96,
+                                  child: _xFileImage(file, fit: BoxFit.cover),
+                                ),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      _attachments.removeAt(index);
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.black54,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ],
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _openAttachmentPreview(XFile file) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: SizedBox(
+              width: 420,
+              height: 420,
+              child: _xFileImage(file, fit: BoxFit.contain),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _xFileImage(XFile file, {required BoxFit fit}) {
+    return FutureBuilder<Uint8List>(
+      future: file.readAsBytes(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+        }
+        final bytes = snapshot.data;
+        if (bytes == null || bytes.isEmpty) {
+          return const Center(child: Icon(Icons.image_not_supported_outlined));
+        }
+        return Image.memory(bytes, fit: fit);
+      },
     );
   }
 
@@ -431,64 +1614,133 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Colors.grey.shade200),
-        ),
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
       ),
       child: Row(
         children: [
-          SizedBox(width: 24, child: Text('$index', style: rowTextStyle)),
-          Expanded(
-            flex: 2,
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                isExpanded: true,
-                value: item.name,
-                hint: Text('Select Item', style: rowTextStyle),
-                items: const [
-                  DropdownMenuItem(value: 'Mouse', child: Text('Mouse')),
-                  DropdownMenuItem(value: 'Keyboard', child: Text('Keyboard')),
-                  DropdownMenuItem(value: 'Laptop', child: Text('Laptop')),
-                ],
-                onChanged: (value) => setState(() => item.name = value),
-              ),
-            ),
-          ),
-          Expanded(child: Text(item.code ?? '', style: rowTextStyle)),
-          Expanded(child: Text(item.details ?? '', style: rowTextStyle)),
-          Expanded(
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                isExpanded: true,
-                value: item.warehouse,
-                hint: Text('Warehouse', style: rowTextStyle),
-                items: const [
-                  DropdownMenuItem(value: 'Warehouse', child: Text('Warehouse')),
-                  DropdownMenuItem(value: 'Main', child: Text('Main')),
-                ],
-                onChanged: (value) => setState(() => item.warehouse = value),
-              ),
-            ),
-          ),
-          Expanded(child: Text(item.projectCode ?? '', style: rowTextStyle)),
-          SizedBox(width: 58, child: Text(item.qty ?? '', style: rowTextStyle)),
+          SizedBox(width: 32, child: Text('$index', style: rowTextStyle)),
           SizedBox(
-            width: 36,
-            child: IconButton(
-              onPressed: () {
-                setState(() {
-                  items.remove(item);
-                });
-              },
-              icon: const Icon(Icons.delete_outline, size: 18),
-              color: const Color(0xFF667085),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
+            width: 250,
+            child: TextField(
+              controller: item.itemCodeController,
+              readOnly: true,
+              style: rowTextStyle,
+              decoration: _itemInputDecoration(
+                hintText: 'Search ItemCode',
+                suffixIcon: const Icon(Icons.arrow_drop_down),
+              ),
+              onTap: () => _openItemPicker(item),
+            ),
+          ),
+          SizedBox(
+            width: 330,
+            child: TextField(
+              controller: item.descriptionController,
+              style: rowTextStyle,
+              decoration: _itemInputDecoration(),
+            ),
+          ),
+          SizedBox(
+            width: 300,
+            child: TextField(
+              controller: item.detailsController,
+              style: rowTextStyle,
+              decoration: _itemInputDecoration(),
+            ),
+          ),
+          SizedBox(
+            width: 170,
+            child: TextField(
+              controller: item.qtyController,
+              keyboardType: TextInputType.number,
+              style: rowTextStyle,
+              decoration: _itemInputDecoration(),
+            ),
+          ),
+          SizedBox(
+            width: 240,
+            child: TextField(
+              controller: item.warehouseCodeController,
+              readOnly: true,
+              style: rowTextStyle,
+              decoration: _itemInputDecoration(
+                hintText: 'Search Warehouse',
+                suffixIcon: const Icon(Icons.arrow_drop_down),
+              ),
+              onTap: () => _openWarehousePicker(item),
+            ),
+          ),
+          SizedBox(
+            width: 220,
+            child: TextField(
+              controller: item.projectCodeController,
+              readOnly: true,
+              style: rowTextStyle,
+              decoration: _itemInputDecoration(
+                hintText: 'Search Project',
+                suffixIcon: const Icon(Icons.arrow_drop_down),
+              ),
+              onTap: () => _openProjectPicker(item),
+            ),
+          ),
+          SizedBox(
+            width: 90,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                InkWell(
+                  onTap: _addItemRow,
+                  child: const Icon(
+                    Icons.add_circle_outline,
+                    color: Colors.green,
+                    size: 24,
+                  ),
+                ),
+                InkWell(
+                  onTap: () => _removeItemRow(item),
+                  child: const Icon(Icons.remove, color: Colors.red, size: 24),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  InputDecoration _itemInputDecoration({String? hintText, Widget? suffixIcon}) {
+    return InputDecoration(
+      isDense: true,
+      hintText: hintText,
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: const Color(0xFFFBFBFC),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+      ),
+    );
+  }
+
+  void _addItemRow() {
+    setState(() {
+      items.add(_PurchaseItem());
+    });
+  }
+
+  void _removeItemRow(_PurchaseItem item) {
+    if (items.length == 1) {
+      return;
+    }
+    setState(() {
+      items.remove(item);
+      item.dispose();
+    });
   }
 
   Widget _sectionCard({required String title, required Widget child}) {
@@ -520,25 +1772,24 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     );
   }
 
-  Widget _twoCol(Widget left, Widget right) {
-    return Row(
-      children: [
-        Expanded(child: left),
-        const SizedBox(width: 10),
-        Expanded(child: right),
-      ],
-    );
-  }
-
-  Widget _labelField(String label, TextEditingController controller) {
+  Widget _labelField(
+    String label,
+    TextEditingController controller, {
+    int maxLines = 1,
+    bool readOnly = false,
+  }) {
     return TextField(
       controller: controller,
+      maxLines: maxLines,
+      readOnly: readOnly,
       decoration: InputDecoration(
         labelText: label,
         filled: true,
         fillColor: const Color(0xFFFBFBFC),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(6),
           borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
@@ -561,8 +1812,10 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
         suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
         filled: true,
         fillColor: const Color(0xFFFBFBFC),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(6),
           borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
@@ -605,8 +1858,10 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
         labelText: label,
         filled: true,
         fillColor: const Color(0xFFFBFBFC),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(6),
           borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
@@ -619,10 +1874,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       hint: Text(hint),
       items: items
           .map(
-            (item) => DropdownMenuItem<String>(
-              value: item,
-              child: Text(item),
-            ),
+            (item) => DropdownMenuItem<String>(value: item, child: Text(item)),
           )
           .toList(),
       onChanged: onChanged,
@@ -631,12 +1883,56 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
 }
 
 class _PurchaseItem {
-  String? name;
-  String? code;
-  String? details;
+  String? itemCode;
   String? warehouse;
   String? projectCode;
-  String? qty;
+  final TextEditingController itemCodeController = TextEditingController();
+  final TextEditingController warehouseCodeController = TextEditingController();
+  final TextEditingController projectCodeController = TextEditingController();
+  final TextEditingController descriptionController = TextEditingController();
+  final TextEditingController detailsController = TextEditingController();
+  final TextEditingController qtyController = TextEditingController();
 
   _PurchaseItem();
+
+  void dispose() {
+    itemCodeController.dispose();
+    warehouseCodeController.dispose();
+    projectCodeController.dispose();
+    descriptionController.dispose();
+    detailsController.dispose();
+    qtyController.dispose();
+  }
+}
+
+class _CodeNameOption {
+  const _CodeNameOption({required this.code, required this.name});
+
+  final String code;
+  final String name;
+
+  String get displayLabel => name.isEmpty ? code : '$code - $name';
+}
+
+class _SalesOrderOption {
+  const _SalesOrderOption({
+    required this.soNo,
+    required this.customer,
+    required this.soDate,
+  });
+
+  final String soNo;
+  final String customer;
+  final String soDate;
+
+  String get displayLabel {
+    final parts = <String>[soNo];
+    if (customer.isNotEmpty) {
+      parts.add(customer);
+    }
+    if (soDate.isNotEmpty) {
+      parts.add(soDate);
+    }
+    return parts.join(' - ');
+  }
 }
