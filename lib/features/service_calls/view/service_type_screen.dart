@@ -262,10 +262,14 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
   static const String _selectProject = "Select Project";
   static const String _selectAttendBy = "Select Attend By";
   static const String _selectItemCode = "Select Item Code";
+  static const String _selectItemName = "Select Item Name";
   static const String _selectMfrSerialNo = "Select MFR Serial Number";
   static const String _selectSerialNumber = "Select Serial Number";
   static const String _selectProblemType = "Select Problem Type";
-  static const String _selectProblemSubType = "Select ProblemSub Type";
+  static const String _selectProblemSubType = "Select Problem Sub Type";
+  static const int _attachmentImageQuality = 70;
+  static const double _attachmentMaxWidth = 1920;
+  static const double _attachmentMaxHeight = 1920;
 
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _imagePicker = ImagePicker();
@@ -302,6 +306,8 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
   DateTime? tourStartDate;
   DateTime? tourEndDate;
   DateTime? closedDate;
+  DateTime createdDate = DateTime.now();
+  DateTime _lastUserPointerDownAt = DateTime.fromMillisecondsSinceEpoch(0);
   int _detailsTabIndex = 0;
   final List<XFile> _attachments = [];
 
@@ -315,8 +321,8 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
   String contractNo = _selectContractNo;
   String selectedProject = _selectProject;
   String assignedTech = _selectAttendBy;
-  String department = "select Department";
-  String serviceType = "select ServiceType";
+  String department = "Select Department";
+  String serviceType = "Select Service Type";
   String originType = "Select";
   String callType = "Select Call Type";
   String chargeable = "Select";
@@ -332,6 +338,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
   String problemSubType = _selectProblemSubType;
   String repairAssessment = "Select";
   String itemCode = _selectItemCode;
+  String itemName = _selectItemName;
   String mfrSerialNumber = _selectMfrSerialNo;
   String serialNumber = _selectSerialNumber;
 
@@ -339,7 +346,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
   void initState() {
     super.initState();
     print('SERVICE TYPE SCREEN initState');
-    createdCtrl.text = _formatDate(DateTime.now());
+    createdCtrl.text = _formatDate(createdDate);
     _syncCustomerTextControllers();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _hasRequestedInitialMasterData) return;
@@ -477,6 +484,11 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     _selectItemCode,
   );
 
+  List<String> get _itemNameItems => _buildOptions(
+    _selectedContractRows.map((row) => row.itemDescription),
+    _selectItemName,
+  );
+
   List<String> get _mfrSerialItems => _buildOptions(
     _selectedContractRows.map((row) => row.mfrSerialNo),
     _selectMfrSerialNo,
@@ -529,17 +541,62 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
 
   void _setProductFieldsFromContract(ContractData contract) {
     final nextItemCode = contract.itemNo.trim();
+    final nextItemName = contract.itemDescription.trim();
     final nextMfr = contract.mfrSerialNo.trim();
     final nextSerial = contract.serialNumber.trim();
     itemCode = nextItemCode.isEmpty ? _selectItemCode : nextItemCode;
+    itemName = nextItemName.isEmpty ? _selectItemName : nextItemName;
     mfrSerialNumber = nextMfr.isEmpty ? _selectMfrSerialNo : nextMfr;
     serialNumber = nextSerial.isEmpty ? _selectSerialNumber : nextSerial;
   }
 
   void _resetProductSelection() {
     itemCode = _selectItemCode;
+    itemName = _selectItemName;
     mfrSerialNumber = _selectMfrSerialNo;
     serialNumber = _selectSerialNumber;
+  }
+
+  String _normalized(String value) => value.trim().toLowerCase();
+
+  bool _isSameValue(String left, String right) =>
+      _normalized(left) == _normalized(right);
+
+  ContractData? _findMatchingProductRow({
+    String? byItemCode,
+    String? byItemName,
+    String? byMfrSerial,
+    String? bySerialNumber,
+  }) {
+    final rows = _selectedContractRows;
+    if (rows.isEmpty) return null;
+
+    final itemCodeValue = (byItemCode ?? '').trim();
+    final itemNameValue = (byItemName ?? '').trim();
+    final mfrValue = (byMfrSerial ?? '').trim();
+    final serialValue = (bySerialNumber ?? '').trim();
+
+    bool isActive(String value, String placeholder) =>
+        value.isNotEmpty && !_isSameValue(value, placeholder);
+
+    final hasItemCode = isActive(itemCodeValue, _selectItemCode);
+    final hasItemName = isActive(itemNameValue, _selectItemName);
+    final hasMfr = isActive(mfrValue, _selectMfrSerialNo);
+    final hasSerial = isActive(serialValue, _selectSerialNumber);
+
+    final matches = rows.where((row) {
+      if (hasItemCode && !_isSameValue(row.itemNo, itemCodeValue)) return false;
+      if (hasItemName &&
+          !_isSameValue(row.itemDescription, itemNameValue)) {
+        return false;
+      }
+      if (hasMfr && !_isSameValue(row.mfrSerialNo, mfrValue)) return false;
+      if (hasSerial && !_isSameValue(row.serialNumber, serialValue)) return false;
+      return true;
+    });
+
+    if (matches.isNotEmpty) return matches.first;
+    return null;
   }
 
   void _resetCustomerSelection() {
@@ -556,6 +613,56 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
         customerName == _selectCustomerName ? '' : customerName;
     phoneCtrl.text = phone == _selectPhone ? '' : phone;
     emailCtrl.text = email == _selectEmail ? '' : email;
+  }
+
+  bool _hasRecentUserTap() {
+    final diff = DateTime.now().difference(_lastUserPointerDownAt);
+    return diff.inMilliseconds >= 0 && diff.inMilliseconds <= 1500;
+  }
+
+  Future<void> _pickCreatedDate() async {
+    if (!_hasRecentUserTap()) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final oneMonthAgo = today.subtract(const Duration(days: 30));
+    DateTime initialDate = DateTime(
+      createdDate.year,
+      createdDate.month,
+      createdDate.day,
+    );
+    if (initialDate.isBefore(oneMonthAgo)) {
+      initialDate = oneMonthAgo;
+    } else if (initialDate.isAfter(today)) {
+      initialDate = today;
+    }
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: oneMonthAgo,
+      lastDate: today,
+      initialDate: initialDate,
+    );
+    if (!mounted || picked == null) return;
+    setState(() {
+      createdDate = picked;
+      createdCtrl.text = _formatDate(picked);
+    });
+  }
+
+  Future<void> _pickClosedDate() async {
+    if (!_hasRecentUserTap()) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      initialDate: closedDate ?? DateTime.now(),
+    );
+    if (!mounted || picked == null) return;
+    setState(() {
+      closedDate = picked;
+      closedDateCtrl.text = _formatDate(picked);
+    });
   }
 
   void _onCustomerCodeChanged(String? value) {
@@ -777,7 +884,12 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
         ],
       ),
       body: SafeArea(
-        child: Form(
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) {
+            _lastUserPointerDownAt = DateTime.now();
+          },
+          child: Form(
           key: _formKey,
           autovalidateMode: _showValidationErrors
               ? AutovalidateMode.always
@@ -800,18 +912,6 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                     _field(
                       "Customer Name",
                       customerNameCtrl,
-                      readOnly: true,
-                    ),
-                    _field(
-                      "Phone",
-                      phoneCtrl,
-                      keyboard: TextInputType.phone,
-                      readOnly: true,
-                    ),
-                    _field(
-                      "Email",
-                      emailCtrl,
-                      keyboard: TextInputType.emailAddress,
                       readOnly: true,
                     ),
                     _dropdown(
@@ -900,7 +1000,6 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                     _dropdown("Status", ticketStatus, [
                       "Select Status",
                       "Open",
-                      "In Progress",
                       "Closed",
                     ], (v) => setState(() => ticketStatus = v!),
                         requiredField: true,
@@ -955,7 +1054,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                         ),
                       ),
                     _dropdown("Department", department, [
-                      "select Department",
+                      "Select Department",
                       "Accounts",
                       "Admin",
                       "Audit",
@@ -974,12 +1073,12 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                       "Support",
                     ], (v) => setState(() => department = v!),
                         requiredField: true,
-                        invalidValues: const ["select Department"]),
+                        invalidValues: const ["Select Department"]),
                     _dropdown(
-                      "ServiceType",
+                      "Service Type",
                       serviceType,
                       [
-                        "select ServiceType",
+                        "Select Service Type",
                         "CAMC",
                         "NCAMC",
                         "WARRANTY",
@@ -991,7 +1090,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                       ],
                       (v) => setState(() => serviceType = v!),
                       requiredField: true,
-                      invalidValues: const ["select ServiceType"],
+                      invalidValues: const ["Select Service Type"],
                     ),
                   ],
                 ),
@@ -1006,7 +1105,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                       originType,
                       [
                         "Select",
-                        "E-Mail",
+                        "Email",
                         "Telephone No.",
                         "Web",
                         "Site Visit",
@@ -1060,9 +1159,8 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                         invalidValues: const ["Select"]),
                     _dropdown("Job Sheet", jobSheet, [
                       "Select",
+                      "Yes",
                       "No",
-                      "YES",
-                      "NO",
                     ], (v) => setState(() => jobSheet = v!),
                         requiredField: true,
                         invalidValues: const ["Select"]),
@@ -1152,8 +1250,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                   children: [
                     _dropdown("Tour Claim", tourClaim, [
                       "No",
-                      "YES",
-                      "NO",
+                      "Yes",
                     ], (v) => setState(() => tourClaim = v!)),
                     _datePicker(
                       "Tour Start Date",
@@ -1178,7 +1275,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                       expenseCtrl,
                       keyboard: TextInputType.number,
                     ),
-                    _field("Tour_Location", tourLocationCtrl),
+                    _field("Tour Location", tourLocationCtrl),
                     _dropdown(
                       "Repair Assessment Type",
                       repairAssessment,
@@ -1197,33 +1294,60 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                       "Item Code",
                       itemCode,
                       _itemCodeItems,
-                      (v) => setState(
-                        () => itemCode =
-                            (v ?? '').trim().isEmpty ? _selectItemCode : v!,
-                      ),
+                      (v) => setState(() {
+                        itemCode =
+                            (v ?? '').trim().isEmpty ? _selectItemCode : v!;
+                        final matched = _findMatchingProductRow(
+                          byItemCode: itemCode,
+                        );
+                        if (matched != null) _setProductFieldsFromContract(matched);
+                      }),
                       requiredField: true,
                       invalidValues: const [_selectItemCode],
+                    ),
+                    _dropdown(
+                      "Item Name",
+                      itemName,
+                      _itemNameItems,
+                      (v) => setState(() {
+                        itemName =
+                            (v ?? '').trim().isEmpty ? _selectItemName : v!;
+                        final matched = _findMatchingProductRow(
+                          byItemName: itemName,
+                        );
+                        if (matched != null) _setProductFieldsFromContract(matched);
+                      }),
+                      requiredField: true,
+                      invalidValues: const [_selectItemName],
                     ),
                     _dropdown(
                       "MFR Serial Number",
                       mfrSerialNumber,
                       _mfrSerialItems,
-                      (v) => setState(
-                        () => mfrSerialNumber =
-                            (v ?? '').trim().isEmpty ? _selectMfrSerialNo : v!,
-                      ),
+                      (v) => setState(() {
+                        mfrSerialNumber = (v ?? '').trim().isEmpty
+                            ? _selectMfrSerialNo
+                            : v!;
+                        final matched = _findMatchingProductRow(
+                          byMfrSerial: mfrSerialNumber,
+                        );
+                        if (matched != null) _setProductFieldsFromContract(matched);
+                      }),
                       invalidValues: const [_selectMfrSerialNo],
                     ),
                     _dropdown(
                       "Serial Number",
                       serialNumber,
                       _serialNumberItems,
-                      (v) => setState(
-                        () => serialNumber =
-                            (v ?? '').trim().isEmpty
+                      (v) => setState(() {
+                        serialNumber = (v ?? '').trim().isEmpty
                             ? _selectSerialNumber
-                            : v!,
-                      ),
+                            : v!;
+                        final matched = _findMatchingProductRow(
+                          bySerialNumber: serialNumber,
+                        );
+                        if (matched != null) _setProductFieldsFromContract(matched);
+                      }),
                       requiredField: true,
                       invalidValues: const [_selectSerialNumber],
                     ),
@@ -1235,26 +1359,22 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                 "Administrative",
                 Column(
                   children: [
-                    _field("Service No", serviceNoCtrl, readOnly: true),
-                    _field("Created", createdCtrl, readOnly: true),
                     _field(
+                      "Service No",
+                      serviceNoCtrl,
+                      readOnly: true,
+                      canRequestFocus: false,
+                    ),
+                    _pickerField(
+                      "Created",
+                      createdCtrl,
+                      requiredField: true,
+                      onPick: _pickCreatedDate,
+                    ),
+                    _pickerField(
                       "Closed Date",
                       closedDateCtrl,
-                      readOnly: true,
-                      suffixIcon: const Icon(Icons.calendar_today),
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime(2100),
-                          initialDate: closedDate ?? DateTime.now(),
-                        );
-                        if (!mounted || picked == null) return;
-                        setState(() {
-                          closedDate = picked;
-                          closedDateCtrl.text = _formatDate(picked);
-                        });
-                      },
+                      onPick: _pickClosedDate,
                     ),
                     TextFormField(
                       controller: remarksCtrl,
@@ -1576,6 +1696,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
               ),
             ],
           ),
+          ),
         ),
       ),
     );
@@ -1608,6 +1729,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     TextEditingController ctrl, {
     TextInputType keyboard = TextInputType.text,
     bool readOnly = false,
+    bool canRequestFocus = true,
     bool requiredField = false,
     Widget? suffixIcon,
     VoidCallback? onTap,
@@ -1618,6 +1740,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
         controller: ctrl,
         keyboardType: keyboard,
         readOnly: readOnly,
+        canRequestFocus: canRequestFocus,
         showCursor: !readOnly,
         enableInteractiveSelection: !readOnly,
         onTap: onTap,
@@ -1650,6 +1773,44 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     );
   }
 
+  Widget _pickerField(
+    String label,
+    TextEditingController ctrl, {
+    bool requiredField = false,
+    required VoidCallback onPick,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          enabledBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Color(0xFFBDBDBD)),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Color(0xFF2563EB), width: 1.5),
+          ),
+          errorBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.red),
+          ),
+          focusedErrorBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.red, width: 1.5),
+          ),
+          suffixIcon: IconButton(
+            onPressed: onPick,
+            icon: const Icon(Icons.calendar_today),
+            tooltip: 'Pick ${label.toLowerCase()}',
+          ),
+        ),
+        child: Text(
+          ctrl.text.trim().isEmpty ? (requiredField ? '' : '-') : ctrl.text,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ),
+    );
+  }
+
   Widget _dropdown(
     String label,
     String? value,
@@ -1669,6 +1830,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: FormField<String>(
+        key: ValueKey<String>('${label}_${dropdownValue ?? ''}'),
         initialValue: dropdownValue,
         validator: requiredField
             ? (v) {
@@ -1937,26 +2099,31 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: TextFormField(
-        readOnly: true,
-        showCursor: false,
-        enableInteractiveSelection: false,
-        controller: controller,
+      child: InputDecorator(
         decoration: InputDecoration(
           labelText: label,
           border: const OutlineInputBorder(),
-          suffixIcon: const Icon(Icons.calendar_today),
+          suffixIcon: IconButton(
+            onPressed: () async {
+              if (!_hasRecentUserTap()) return;
+              FocusManager.instance.primaryFocus?.unfocus();
+              final picked = await showDatePicker(
+                context: context,
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2100),
+                initialDate: date ?? DateTime.now(),
+              );
+              if (!mounted || picked == null) return;
+              onPicked(picked);
+            },
+            icon: const Icon(Icons.calendar_today),
+            tooltip: 'Pick ${label.toLowerCase()}',
+          ),
         ),
-        onTap: () async {
-          final picked = await showDatePicker(
-            context: context,
-            firstDate: DateTime(2000),
-            lastDate: DateTime(2100),
-            initialDate: date ?? DateTime.now(),
-          );
-          if (!mounted || picked == null) return;
-          onPicked(picked);
-        },
+        child: Text(
+          controller.text.trim().isEmpty ? '-' : controller.text,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
       ),
     );
   }
@@ -1989,7 +2156,11 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
       }
 
       if (source == ImageSource.gallery) {
-        final pickedFiles = await _imagePicker.pickMultiImage();
+        final pickedFiles = await _imagePicker.pickMultiImage(
+          imageQuality: _attachmentImageQuality,
+          maxWidth: _attachmentMaxWidth,
+          maxHeight: _attachmentMaxHeight,
+        );
         if (pickedFiles.isEmpty) return;
         if (!mounted) return;
         setState(() {
@@ -1998,7 +2169,12 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
         return;
       }
 
-      final picked = await _imagePicker.pickImage(source: ImageSource.camera);
+      final picked = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: _attachmentImageQuality,
+        maxWidth: _attachmentMaxWidth,
+        maxHeight: _attachmentMaxHeight,
+      );
       if (picked == null) return;
       if (!mounted) return;
       setState(() {
@@ -2130,9 +2306,9 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
       assignedTech: _valueOrEmpty(assignedTech, <String>[
         _selectAttendBy,
       ]),
-      serviceType: _valueOrEmpty(serviceType, <String>['select ServiceType']),
+      serviceType: _valueOrEmpty(serviceType, <String>['Select Service Type']),
       serviceNo: serviceNoCtrl.text.trim(),
-      createdDate: _formatDateTimeForApi(DateTime.now()),
+      createdDate: _formatDateTimeForApi(createdDate),
       closedDate: closedDate == null ? null : _formatDateTimeForApi(closedDate!),
       originType: _valueOrEmpty(originType, <String>['Select']),
       problemType: _valueOrEmpty(problemType, <String>[_selectProblemType]),

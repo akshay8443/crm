@@ -12,6 +12,7 @@ class ApiConstants {
   static const String getNextServiceNoPath = '/api/GetNextServiceNo';
   static const String getAllServiceCallPath = '/api/GetAllserviceCall';
   static const String getSpecficServiceCallPath = '/api/GetSpecficserviceCall';
+  static const String updateServiceCallStatusPath = '/api/updateservicecallstatus';
   static const String getAttachmentsPath = '/api/GetAttachments';
   static const String uploadImagePath = '/api/UploadImage';
   static const String basicAuthorization =

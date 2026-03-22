@@ -13,11 +13,19 @@ class ServiceCallDetailScreen extends StatefulWidget {
 }
 
 class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
+  static const List<String> _statusOptions = <String>[
+    'Open',
+    'Closed',
+    'Call Closed JWS Open',
+  ];
+
   final _serviceCallViewModel = ServiceCallViewModel();
   bool _isLoading = false;
+  bool _isUpdatingStatus = false;
   String? _loadError;
   Map<String, dynamic> _details = <String, dynamic>{};
   List<Map<String, dynamic>> _attachments = <Map<String, dynamic>>[];
+  String? _selectedStatus;
 
   Future<void> _loadDetails() async {
     setState(() {
@@ -37,6 +45,7 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
       setState(() {
         _details = data;
         _attachments = attachments;
+        _selectedStatus = _normalizeStatus(_rawValueFor(const ['CurrentStatus']));
       });
     } catch (e) {
       if (!mounted) return;
@@ -53,6 +62,66 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
         });
       }
     }
+  }
+
+  Future<void> _updateCurrentStatus() async {
+    final selected = _selectedStatus;
+    if (selected == null || selected.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a valid status.')),
+      );
+      return;
+    }
+    if (!_hasStatusChanged) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Status is unchanged.')));
+      return;
+    }
+
+    setState(() {
+      _isUpdatingStatus = true;
+    });
+    try {
+      final response = await _serviceCallViewModel.updateServiceCallStatus(
+        serviceNo: widget.serviceNo,
+        currentStatus: selected,
+      );
+      if (!mounted) return;
+      final message = (response['message'] ?? 'Status updated successfully')
+          .toString()
+          .trim();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message.isEmpty ? 'Status updated successfully' : message)),
+      );
+      await _loadDetails();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Status update failed: $e')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdatingStatus = false;
+        });
+      }
+    }
+  }
+
+  bool get _hasStatusChanged {
+    final current = _normalizeStatus(_rawValueFor(const ['CurrentStatus']));
+    return _selectedStatus != null && _selectedStatus != current;
+  }
+
+  String? _normalizeStatus(String? value) {
+    if (value == null) return null;
+    final cleaned = value.replaceAll(RegExp(r'[^A-Za-z]'), '').toLowerCase();
+    if (cleaned == 'open') return 'Open';
+    if (cleaned == 'inprogress' || cleaned == 'progress') return 'InProgress';
+    if (cleaned == 'closed' || cleaned == 'close') return 'Closed';
+    if (cleaned == 'callclosedjwsopen') return 'Call Closed JWS Open';
+    return null;
   }
 
   String _attachmentName(Map<String, dynamic> item) {
@@ -220,15 +289,31 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
       _section('Customer', <Widget>[
         _infoTile('Customer Code', _valueFor(const ['CustomerCode'])),
         _infoTile('Customer Name', _valueFor(const ['CustomerName'])),
-        _infoTile('Phone', _valueFor(const ['Phone'])),
-        _infoTile('Email', _valueFor(const ['Email'])),
         _infoTile('Contract No', _valueFor(const ['ContractNo'])),
       ]),
       _section('Service', <Widget>[
         _infoTile('Service Call ID', _valueFor(const ['ServiceCallId'])),
         _infoTile('Service No', _valueFor(const ['ServiceNo', 'serviceNo'])),
         _infoTile('Service Type', _valueFor(const ['ServiceType'])),
-        _infoTile('Current Status', _valueFor(const ['CurrentStatus'])),
+        _statusEditorTile(),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 8),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton(
+              onPressed: _isLoading || _isUpdatingStatus || !_hasStatusChanged
+                  ? null
+                  : _updateCurrentStatus,
+              child: _isUpdatingStatus
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Update'),
+            ),
+          ),
+        ),
         _infoTile('Priority', _valueFor(const ['Priority'])),
         _infoTile('Assigned Tech', _valueFor(const ['AssignedTech'])),
         _infoTile('Created Date', _valueFor(const ['CreatedDate'])),
@@ -236,6 +321,7 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
       ]),
       _section('Product', <Widget>[
         _infoTile('Item Code', _valueFor(const ['ItemCode'])),
+        _infoTile('Item Name', _valueFor(const ['ItemName', 'ItemDescription'])),
         _infoTile('Serial Number', _valueFor(const ['SerialNumber'])),
         _infoTile('MFR Serial No', _valueFor(const ['MFRSerialno'])),
       ]),
@@ -285,6 +371,10 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
   }
 
   Widget _infoTile(String label, String value) {
+    return _infoTileChild(label, Text(value));
+  }
+
+  Widget _infoTileChild(String label, Widget child) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -297,21 +387,57 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
-          Expanded(child: Text(value)),
+          Expanded(child: child),
         ],
       ),
     );
   }
 
-  String _valueFor(List<String> keys) {
+  Widget _statusEditorTile() {
+    return _infoTileChild(
+      'Current Status',
+      DropdownButtonFormField<String>(
+        initialValue: _selectedStatus,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          isDense: true,
+          border: OutlineInputBorder(),
+          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        ),
+        hint: const Text('Select Status'),
+        items: _statusOptions
+            .map(
+              (status) => DropdownMenuItem<String>(
+                value: status,
+                child: Text(status),
+              ),
+            )
+            .toList(),
+        onChanged: _isUpdatingStatus
+            ? null
+            : (value) {
+                setState(() {
+                  _selectedStatus = value;
+                });
+              },
+      ),
+    );
+  }
+
+  String? _rawValueFor(List<String> keys) {
     for (final key in keys) {
       if (_details.containsKey(key)) {
         final value = _details[key];
-        if (value == null) return '-';
+        if (value == null) return null;
         final text = value.toString().trim();
-        return text.isEmpty ? '-' : text;
+        if (text.isNotEmpty && text != '-') return text;
       }
     }
-    return '-';
+    return null;
+  }
+
+  String _valueFor(List<String> keys) {
+    final value = _rawValueFor(keys);
+    return value ?? '-';
   }
 }

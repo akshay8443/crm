@@ -1,437 +1,5 @@
-
-// import 'package:flutter/material.dart';
-
-// class PurchaseRequestScreen extends StatefulWidget {
-//   const PurchaseRequestScreen({super.key});
-
-//   @override
-//   State<PurchaseRequestScreen> createState() => _PurchaseRequestScreenState();
-// }
-
-// class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
-//   final _remarksController = TextEditingController();
-
-//   final List<_PurchaseItem> items = [
-//     _PurchaseItem(name: 'Mouse', code: 'IT001', qty: '0'),
-//   ];
-
-//   @override
-//   void dispose() {
-//     _remarksController.dispose();
-//     super.dispose();
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       backgroundColor: const Color(0xFFF5F5F5),
-//       appBar: AppBar(
-//   backgroundColor: const Color(0xFF1E293B),
-//   elevation: 0,
-
-//   // 🔙 BACK BUTTON
-//   leading: IconButton(
-//     icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
-//     onPressed: () {
-//       Navigator.pop(context);
-//     },
-//   ),
-
-//   title: Column(
-//     crossAxisAlignment: CrossAxisAlignment.start,
-//     children: const [
-//       Text(
-//         "Purchase Request",
-//         style: TextStyle(
-//           color: Colors.white,
-//           fontSize: 16,
-//           fontWeight: FontWeight.w600,
-//         ),
-//       ),
-//       Text(
-//         "Procurement Module / New Entry",
-//         style: TextStyle(
-//           color: Color(0xFF94A3B8),
-//           fontSize: 11,
-//           fontWeight: FontWeight.w400,
-//         ),
-//       ),
-//     ],
-//   ),
-
-//   actions: [
-//     TextButton(
-//       onPressed: () {},
-//       child: const Text(
-//         "Discard",
-//         style: TextStyle(color: Colors.white70, fontSize: 13),
-//       ),
-//     ),
-//     const SizedBox(width: 4),
-//     ElevatedButton.icon(
-//       onPressed: () {},
-//       style: ElevatedButton.styleFrom(
-//         backgroundColor: const Color(0xFF3B82F6),
-//         foregroundColor: Colors.white,
-//         elevation: 0,
-//         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-//       ),
-//       icon: const Icon(Icons.save, size: 16),
-//       label: const Text("Save", style: TextStyle(fontSize: 13)),
-//     ),
-//     const SizedBox(width: 8),
-//   ],
-// )
-// ,
-//       body: SingleChildScrollView(
-//         padding: const EdgeInsets.all(12),
-//         child: Column(
-//           children: [
-//             _sectionRequester(),
-//             const SizedBox(height: 12),
-//             _sectionLogistics(),
-//             const SizedBox(height: 12),
-//             _sectionMetadata(),
-//             const SizedBox(height: 12),
-//             _sectionItems(),
-//             const SizedBox(height: 12),
-//             _sectionRemarks(),
-//             const SizedBox(height: 24),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-
-//   // ---------------- SECTIONS ----------------
-
-//   Widget _sectionRequester() {
-//     return _card(
-//       title: "REQUESTER DETAILS",
-//       icon: Icons.person_outline,
-//       child: _textField(label: "Requester Name", value: "Manu"),
-//     );
-//   }
-
-//   Widget _sectionLogistics() {
-//     return _card(
-//       title: "LOGISTICS",
-//       icon: Icons.local_shipping_outlined,
-//       child: Column(
-//         children: [
-//           _dropdown("Target Warehouse", "Delhi Warehouse"),
-//           const SizedBox(height: 12),
-//           _textField(label: "Warehouse Code", value: "WH-DEL"),
-//         ],
-//       ),
-//     );
-//   }
-
-//   Widget _sectionMetadata() {
-//     return _card(
-//       title: "DOCUMENT METADATA",
-//       icon: Icons.description_outlined,
-//       child: Column(
-//         children: [
-//           _rowFields(
-//             _textField(label: "Doc No", value: "PR-202601271556"),
-//             _textField(label: "Doc Date", value: "2026-01-27"),
-//           ),
-//           const SizedBox(height: 12),
-//           _rowFields(
-//             _dateField(label: "Valid Until", hint: "dd-mm-yyyy"),
-//             _dateField(label: "Required Date", hint: "dd-mm-yyyy"),
-//           ),
-//           const SizedBox(height: 12),
-//           _textField(
-//             label: "Project Reference",
-//             hint: "e.g. PRJ-202X-001",
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-
-//   Widget _sectionItems() {
-//     return _card(
-//       title: "ITEMS",
-//       icon: Icons.inventory_2_outlined,
-//       child: Column(
-//         children: [
-//           // Items list
-//           ...items.asMap().entries.map((entry) => _itemRow(entry.key + 1, entry.value)),
-//           const SizedBox(height: 8),
-//           SizedBox(
-//             width: double.infinity,
-//             child: OutlinedButton.icon(
-//               onPressed: () {
-//                 setState(() {
-//                   items.add(_PurchaseItem(name: '', code: '', qty: '0'));
-//                 });
-//               },
-//               style: OutlinedButton.styleFrom(
-//                 foregroundColor: const Color(0xFF3B82F6),
-//                 side: const BorderSide(color: Color(0xFF3B82F6)),
-//                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-//               ),
-//               icon: const Icon(Icons.add, size: 18),
-//               label: const Text("Add New Item"),
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-
-//   Widget _sectionRemarks() {
-//     return _card(
-//       title: "REMARKS",
-//       icon: Icons.notes_outlined,
-//       child: TextField(
-//         controller: _remarksController,
-//         maxLines: 3,
-//         decoration: const InputDecoration(
-//           hintText: "Enter any additional instructions, approvals, or shipping notes here...",
-//           hintStyle: TextStyle(color: Color(0xFF94A3B8)),
-//           border: OutlineInputBorder(),
-//           filled: true,
-//           fillColor: Colors.white,
-//         ),
-//       ),
-//     );
-//   }
-
-//   // ---------------- ITEM ROW ----------------
-
-//   Widget _itemRow(int index, _PurchaseItem item) {
-//     return Container(
-//       margin: const EdgeInsets.only(bottom: 12),
-//       padding: const EdgeInsets.all(12),
-//       decoration: BoxDecoration(
-//         color: Colors.white,
-//         borderRadius: BorderRadius.circular(8),
-//         border: Border.all(color: const Color(0xFFE2E8F0)),
-//       ),
-//       child: Column(
-//         crossAxisAlignment: CrossAxisAlignment.start,
-//         children: [
-//           // Header row with index and delete button
-//           Row(
-//             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-//             children: [
-//               Container(
-//                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-//                 decoration: BoxDecoration(
-//                   color: const Color(0xFFF1F5F9),
-//                   borderRadius: BorderRadius.circular(4),
-//                 ),
-//                 child: Text(
-//                   "#$index",
-//                   style: const TextStyle(
-//                     fontSize: 12,
-//                     fontWeight: FontWeight.w600,
-//                     color: Color(0xFF64748B),
-//                   ),
-//                 ),
-//               ),
-//               IconButton(
-//                 icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444), size: 20),
-//                 onPressed: () {
-//                   setState(() {
-//                     items.remove(item);
-//                   });
-//                 },
-//                 padding: EdgeInsets.zero,
-//                 constraints: const BoxConstraints(),
-//                 tooltip: "Delete Item",
-//               ),
-//             ],
-//           ),
-//           const SizedBox(height: 12),
-          
-//           // Item Description Dropdown
-//           DropdownButtonFormField<String>(
-//             value: item.name.isEmpty ? null : item.name,
-//             hint: const Text("Item Description", style: TextStyle(fontSize: 14)),
-//             items: const [
-//               DropdownMenuItem(value: 'Mouse', child: Text("Mouse")),
-//               DropdownMenuItem(value: 'Keyboard', child: Text("Keyboard")),
-//             ],
-//             onChanged: (v) => setState(() => item.name = v ?? ''),
-//             decoration: const InputDecoration(
-//               labelText: "Item Description",
-//               border: OutlineInputBorder(),
-//               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-//               isDense: true,
-//             ),
-//           ),
-//           const SizedBox(height: 12),
-          
-//           // Item Code and Qty row
-//           Row(
-//             children: [
-//               Expanded(
-//                 flex: 2,
-//                 child: TextField(
-//                   controller: item.code.isNotEmpty ? TextEditingController(text: item.code) : null,
-//                   decoration: const InputDecoration(
-//                     labelText: "Item Code",
-//                     border: OutlineInputBorder(),
-//                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-//                     isDense: true,
-//                   ),
-//                 ),
-//               ),
-//               const SizedBox(width: 12),
-//               Expanded(
-//                 child: TextField(
-//                   controller: item.qty.isNotEmpty ? TextEditingController(text: item.qty) : null,
-//                   keyboardType: TextInputType.number,
-//                   decoration: const InputDecoration(
-//                     labelText: "Qty",
-//                     border: OutlineInputBorder(),
-//                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-//                     isDense: true,
-//                   ),
-//                 ),
-//               ),
-//             ],
-//           ),
-//           const SizedBox(height: 12),
-          
-//           // Requirement/Specs
-//           TextField(
-//             maxLines: 2,
-//             decoration: const InputDecoration(
-//               labelText: "Requirement / Specs",
-//               hintText: "Enter details...",
-//               hintStyle: TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
-//               border: OutlineInputBorder(),
-//               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-//               isDense: true,
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-
-//   // ---------------- COMMON UI ----------------
-
-//   Widget _card({required String title, required IconData icon, required Widget child}) {
-//     return Card(
-//       elevation: 0,
-//       shape: RoundedRectangleBorder(
-//         borderRadius: BorderRadius.circular(12),
-//         side: const BorderSide(color: Color(0xFFE2E8F0)),
-//       ),
-//       child: Padding(
-//         padding: const EdgeInsets.all(16),
-//         child: Column(
-//           crossAxisAlignment: CrossAxisAlignment.start,
-//           children: [
-//             Row(
-//               children: [
-//                 Icon(icon, size: 20, color: const Color(0xFF3B82F6)),
-//                 const SizedBox(width: 8),
-//                 Text(
-//                   title,
-//                   style: const TextStyle(
-//                     fontSize: 13,
-//                     fontWeight: FontWeight.w600,
-//                     color: Color(0xFF64748B),
-//                     letterSpacing: 0.5,
-//                   ),
-//                 ),
-//               ],
-//             ),
-//             const SizedBox(height: 16),
-//             child,
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-
-//   Widget _rowFields(Widget a, Widget b) {
-//     return Row(
-//       children: [
-//         Expanded(child: a),
-//         const SizedBox(width: 12),
-//         Expanded(child: b),
-//       ],
-//     );
-//   }
-
-//   Widget _textField({required String label, String? value, String? hint}) {
-//     return TextField(
-//       controller: value != null ? TextEditingController(text: value) : null,
-//       decoration: InputDecoration(
-//         labelText: label,
-//         hintText: hint,
-//         hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
-//         border: const OutlineInputBorder(),
-//         filled: true,
-//         fillColor: Colors.white,
-//         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-//         isDense: true,
-//       ),
-//     );
-//   }
-
-//   Widget _dateField({required String label, String? hint}) {
-//     return TextField(
-//       readOnly: true,
-//       decoration: InputDecoration(
-//         labelText: label,
-//         hintText: hint,
-//         hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
-//         suffixIcon: const Icon(Icons.calendar_today, size: 18),
-//         border: const OutlineInputBorder(),
-//         filled: true,
-//         fillColor: Colors.white,
-//         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-//         isDense: true,
-//       ),
-//       onTap: () {
-//         // TODO: Show date picker
-//       },
-//     );
-//   }
-
-//   Widget _dropdown(String label, String value) {
-//     return TextField(
-//       readOnly: true,
-//       controller: TextEditingController(text: value),
-//       decoration: InputDecoration(
-//         labelText: label,
-//         suffixIcon: const Icon(Icons.arrow_drop_down),
-//         border: const OutlineInputBorder(),
-//         filled: true,
-//         fillColor: Colors.white,
-//         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-//         isDense: true,
-//       ),
-//     );
-//   }
-// }
-
-// // ---------------- MODEL ----------------
-
-// class _PurchaseItem {
-//   String name;
-//   String code;
-//   String qty;
-
-//   _PurchaseItem({
-//     required this.name,
-//     required this.code,
-//     required this.qty,
-//   });
-// }
-
-
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 class PurchaseRequestScreen extends StatefulWidget {
   const PurchaseRequestScreen({super.key});
@@ -441,178 +9,357 @@ class PurchaseRequestScreen extends StatefulWidget {
 }
 
 class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
-  final _remarksController = TextEditingController();
-  final validUntilController = TextEditingController();
-  final requiredDateController = TextEditingController();
-
+  final ImagePicker _imagePicker = ImagePicker();
   final List<_PurchaseItem> items = [
-    _PurchaseItem(name: 'Mouse', code: 'IT001', qty: '0'),
+    _PurchaseItem(),
   ];
+  final List<XFile> _attachments = [];
+
+  final _requesterNameController = TextEditingController(text: 'Manu');
+  final _ownerNameController = TextEditingController();
+  final _reqDepartmentController = TextEditingController();
+  final _reqToController = TextEditingController();
+
+  final _docNoController = TextEditingController(text: 'PR-20260312');
+  final _docDateController = TextEditingController(text: '2026-03-12');
+  final _amendmentDateController = TextEditingController();
+  final _shipToController = TextEditingController();
+  final _serviceCallController = TextEditingController();
+  final _salesOrderController = TextEditingController();
+
+  String? _replacementReason;
+  String? _responsibleDepartment;
+  String? _privateClient;
+  String? _priority;
 
   @override
   void dispose() {
-    _remarksController.dispose();
-    validUntilController.dispose();
-    requiredDateController.dispose();
+    _requesterNameController.dispose();
+    _ownerNameController.dispose();
+    _reqDepartmentController.dispose();
+    _reqToController.dispose();
+    _docNoController.dispose();
+    _docDateController.dispose();
+    _amendmentDateController.dispose();
+    _shipToController.dispose();
+    _serviceCallController.dispose();
+    _salesOrderController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: const Color(0xFFF3F5F8),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: const Color(0xFF061633),
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new,
-              color: Colors.white, size: 18),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text(
-              "Purchase Request",
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600),
-            ),
-            Text(
-              "Procurement Module / New Entry",
-              style: TextStyle(
-                  color: Color(0xFF94A3B8),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w400),
-            ),
-          ],
+        centerTitle: false,
+        titleSpacing: 0,
+        title: const Text(
+          'Purchase Request',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
         ),
         actions: [
-          TextButton(
-            onPressed: () {},
-            child: const Text("Discard",
-                style: TextStyle(color: Colors.white70, fontSize: 13)),
-          ),
-          const SizedBox(width: 4),
-          ElevatedButton.icon(
-            onPressed: () {},
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF3B82F6),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: OutlinedButton(
+              onPressed: () {},
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                backgroundColor: Colors.white.withValues(alpha: 0.12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Cancel'),
             ),
-            icon: const Icon(Icons.save, size: 16),
-            label: const Text("Save", style: TextStyle(fontSize: 13)),
           ),
           const SizedBox(width: 8),
+          Padding(
+            padding: const EdgeInsets.only(right: 8, top: 10, bottom: 10),
+            child: FilledButton(
+              onPressed: () {},
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF1E69F2),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Save & Submit'),
+            ),
+          ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            _sectionRequester(),
-            const SizedBox(height: 12),
-            _sectionLogistics(),
-            const SizedBox(height: 12),
-            _sectionMetadata(),
-            const SizedBox(height: 12),
-            _sectionItems(),
-            const SizedBox(height: 12),
-            _sectionRemarks(),
-            const SizedBox(height: 24),
-          ],
+      body: SafeArea(
+        top: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isMobile = constraints.maxWidth < 900;
+
+            return SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                isMobile ? 12 : 16,
+                14,
+                isMobile ? 12 : 16,
+                14 + MediaQuery.of(context).padding.bottom,
+              ),
+              child: Column(
+                children: [
+                  if (isMobile) ...[
+                    _buildRequesterDetailsCard(),
+                    const SizedBox(height: 12),
+                    _buildDocumentInfoCard(),
+                  ] else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _buildRequesterDetailsCard()),
+                        const SizedBox(width: 16),
+                        Expanded(child: _buildDocumentInfoCard()),
+                      ],
+                    ),
+                  const SizedBox(height: 14),
+                  _buildItemsCard(isMobile),
+                  const SizedBox(height: 14),
+                  _buildAttachmentsCard(),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
-  // ---------------- SECTIONS ----------------
-
-  Widget _sectionRequester() {
-    return _card(
-      title: "REQUESTER DETAILS",
-      icon: Icons.person_outline,
-      child: _textField(label: "Requester Name", value: "Manu"),
+  Future<void> _openUploadOptions() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.camera_alt_outlined),
+                  title: const Text('Take Photo'),
+                  onTap: () async {
+                    Navigator.pop(sheetContext);
+                    await _pickFromCamera();
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.photo_library_outlined),
+                  title: const Text('Choose From Gallery'),
+                  onTap: () async {
+                    Navigator.pop(sheetContext);
+                    await _pickFromGallery();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _sectionLogistics() {
-    return _card(
-      title: "LOGISTICS",
-      icon: Icons.local_shipping_outlined,
+  Future<void> _pickFromCamera() async {
+    try {
+      final photo = await _imagePicker.pickImage(source: ImageSource.camera);
+      if (!mounted || photo == null) {
+        return;
+      }
+
+      setState(() {
+        _attachments.add(photo);
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open camera')),
+      );
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      final files = await _imagePicker.pickMultiImage();
+      if (!mounted || files.isEmpty) {
+        return;
+      }
+
+      setState(() {
+        _attachments.addAll(files);
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to pick files from gallery')),
+      );
+    }
+  }
+
+  Widget _buildRequesterDetailsCard() {
+    return _sectionCard(
+      title: 'Requester Details',
       child: Column(
         children: [
-          _dropdown("Target Warehouse", "Delhi Warehouse"),
-          const SizedBox(height: 12),
-          _textField(label: "Warehouse Code", value: "WH-DEL"),
+          _labelField('Requester Name', _requesterNameController),
+          const SizedBox(height: 10),
+          _labelField('Owner Name', _ownerNameController),
+          const SizedBox(height: 10),
+          _labelField('Requisition To Department', _reqDepartmentController),
+          const SizedBox(height: 10),
+          _labelField('Requisition To', _reqToController),
         ],
       ),
     );
   }
 
-  Widget _sectionMetadata() {
-    return _card(
-      title: "DOCUMENT METADATA",
-      icon: Icons.description_outlined,
+  Widget _buildDocumentInfoCard() {
+    return _sectionCard(
+      title: 'Document Info',
       child: Column(
         children: [
-          _rowFields(
-            _textField(label: "Doc No", value: "PR-202601271556"),
-            _textField(label: "Doc Date", value: "2026-01-27"),
+          _twoCol(
+            _labelField('Doc No', _docNoController),
+            _labelField('Doc Date', _docDateController),
           ),
-          const SizedBox(height: 12),
-          _rowFields(
-            _dateField(
-              label: "Valid Until",
-              hint: "dd-mm-yyyy",
-              controller: validUntilController,
-            ),
-            _dateField(
-              label: "Required Date",
-              hint: "dd-mm-yyyy",
-              controller: requiredDateController,
+          const SizedBox(height: 10),
+          _twoCol(
+            _dateField('Amendment Date', _amendmentDateController),
+            _dropdownField(
+              label: 'Requirement Type',
+              value: null,
+              items: const ['Purchase', 'Replacement'],
+              onChanged: (_) {},
+              hint: 'Select Type',
             ),
           ),
-          const SizedBox(height: 12),
-          _textField(
-            label: "Project Reference",
-            hint: "e.g. PRJ-202X-001",
+          const SizedBox(height: 10),
+          _twoCol(
+            _dropdownField(
+              label: 'Explanation for Replacement',
+              value: _replacementReason,
+              items: const ['Breakdown', 'Upgrade', 'Warranty'],
+              onChanged: (value) => setState(() => _replacementReason = value),
+              hint: 'Select Reason',
+            ),
+            _dropdownField(
+              label: 'Responsible Department',
+              value: _responsibleDepartment,
+              items: const ['IT', 'Operations', 'Service'],
+              onChanged: (value) =>
+                  setState(() => _responsibleDepartment = value),
+              hint: 'Select Department',
+            ),
           ),
+          const SizedBox(height: 10),
+          _twoCol(
+            _labelField('Ship To', _shipToController),
+            _dropdownField(
+              label: 'Private Client',
+              value: _privateClient,
+              items: const ['Yes', 'No'],
+              onChanged: (value) => setState(() => _privateClient = value),
+              hint: 'Select Option',
+            ),
+          ),
+          const SizedBox(height: 10),
+          _twoCol(
+            _dropdownField(
+              label: 'Priority',
+              value: _priority,
+              items: const ['Low', 'Medium', 'High'],
+              onChanged: (value) => setState(() => _priority = value),
+              hint: 'Select Priority',
+            ),
+            _labelField('Service Call No', _serviceCallController),
+          ),
+          const SizedBox(height: 10),
+          _labelField('Sales Order No', _salesOrderController),
         ],
       ),
     );
   }
 
-  Widget _sectionItems() {
-    return _card(
-      title: "ITEMS",
-      icon: Icons.inventory_2_outlined,
+  Widget _buildItemsCard(bool isMobile) {
+    final headerStyle = TextStyle(
+      fontSize: isMobile ? 11 : 12,
+      fontWeight: FontWeight.w700,
+      color: const Color(0xFF6C7684),
+    );
+
+    return _sectionCard(
+      title: 'Items',
       child: Column(
         children: [
-          ...items.asMap().entries.map(
-                (e) => _itemRow(e.key + 1, e.value),
-              ),
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F3F7),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            child: Row(
+              children: [
+                SizedBox(width: 24, child: Text('#', style: headerStyle)),
+                Expanded(flex: 2, child: Text('ITEM', style: headerStyle)),
+                Expanded(child: Text('ITEMCODE', style: headerStyle)),
+                Expanded(child: Text('ITEMDETAILS', style: headerStyle)),
+                Expanded(child: Text('WAREHOUSE', style: headerStyle)),
+                Expanded(child: Text('PROJECTCODE', style: headerStyle)),
+                SizedBox(width: 58, child: Text('QTY', style: headerStyle)),
+                SizedBox(width: 36, child: Text('ACT', style: headerStyle)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          ...List.generate(
+            items.length,
+            (index) => _itemRow(index + 1, items[index], isMobile),
+          ),
           const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                setState(() {
-                  items.add(_PurchaseItem(name: '', code: '', qty: '0'));
-                });
-              },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF3B82F6),
-                side: const BorderSide(color: Color(0xFF3B82F6)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          InkWell(
+            onTap: () {
+              setState(() {
+                items.add(_PurchaseItem());
+              });
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 11),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: const Color(0xFF8FB2E9),
+                  style: BorderStyle.solid,
+                ),
               ),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text("Add New Item"),
+              child: const Center(
+                child: Text(
+                  'Add Item',
+                  style: TextStyle(
+                    color: Color(0xFF143A78),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 17,
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -620,94 +367,123 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     );
   }
 
-  Widget _sectionRemarks() {
-    return _card(
-      title: "REMARKS",
-      icon: Icons.notes_outlined,
-      child: TextField(
-        controller: _remarksController,
-        maxLines: 3,
-        decoration: const InputDecoration(
-          hintText:
-              "Enter any additional instructions, approvals, or shipping notes here...",
-          border: OutlineInputBorder(),
-          filled: true,
-          fillColor: Colors.white,
+  Widget _buildAttachmentsCard() {
+    return _sectionCard(
+      title: 'Attachments',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: _openUploadOptions,
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(minHeight: 130),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFBFCFE),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: const Color(0xFFC8CED9),
+              style: BorderStyle.solid,
+            ),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Take Photo / Choose From Gallery',
+                  style: TextStyle(
+                    color: Color(0xFF6A7685),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Click here to upload files',
+                  style: TextStyle(
+                    color: Color(0xFF2D66C6),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (_attachments.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '${_attachments.length} file(s) selected',
+                    style: const TextStyle(
+                      color: Color(0xFF2B3A4A),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
-  // ---------------- ITEM ROW ----------------
+  Widget _itemRow(int index, _PurchaseItem item, bool isMobile) {
+    final rowTextStyle = TextStyle(
+      color: const Color(0xFF2A3038),
+      fontSize: isMobile ? 12 : 14,
+    );
 
-  Widget _itemRow(int index, _PurchaseItem item) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200),
+        ),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text("#$index",
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 12)),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                onPressed: () {
-                  setState(() => items.remove(item));
-                },
-              )
-            ],
-          ),
-          DropdownButtonFormField<String>(
-            value: item.name.isEmpty ? null : item.name,
-            items: const [
-              DropdownMenuItem(value: "Mouse", child: Text("Mouse")),
-              DropdownMenuItem(value: "Keyboard", child: Text("Keyboard")),
-            ],
-            onChanged: (v) => setState(() => item.name = v ?? ''),
-            decoration: const InputDecoration(
-              labelText: "Item Description",
-              border: OutlineInputBorder(),
+          SizedBox(width: 24, child: Text('$index', style: rowTextStyle)),
+          Expanded(
+            flex: 2,
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                isExpanded: true,
+                value: item.name,
+                hint: Text('Select Item', style: rowTextStyle),
+                items: const [
+                  DropdownMenuItem(value: 'Mouse', child: Text('Mouse')),
+                  DropdownMenuItem(value: 'Keyboard', child: Text('Keyboard')),
+                  DropdownMenuItem(value: 'Laptop', child: Text('Laptop')),
+                ],
+                onChanged: (value) => setState(() => item.name = value),
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  decoration: const InputDecoration(
-                    labelText: "Item Code",
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (v) => item.code = v,
-                ),
+          Expanded(child: Text(item.code ?? '', style: rowTextStyle)),
+          Expanded(child: Text(item.details ?? '', style: rowTextStyle)),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                isExpanded: true,
+                value: item.warehouse,
+                hint: Text('Warehouse', style: rowTextStyle),
+                items: const [
+                  DropdownMenuItem(value: 'Warehouse', child: Text('Warehouse')),
+                  DropdownMenuItem(value: 'Main', child: Text('Main')),
+                ],
+                onChanged: (value) => setState(() => item.warehouse = value),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: "Qty",
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (v) => item.qty = v,
-                ),
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 8),
-          const TextField(
-            maxLines: 2,
-            decoration: InputDecoration(
-              labelText: "Requirement / Specs",
-              border: OutlineInputBorder(),
+          Expanded(child: Text(item.projectCode ?? '', style: rowTextStyle)),
+          SizedBox(width: 58, child: Text(item.qty ?? '', style: rowTextStyle)),
+          SizedBox(
+            width: 36,
+            child: IconButton(
+              onPressed: () {
+                setState(() {
+                  items.remove(item);
+                });
+              },
+              icon: const Icon(Icons.delete_outline, size: 18),
+              color: const Color(0xFF667085),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
           ),
         ],
@@ -715,113 +491,152 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     );
   }
 
-  // ---------------- COMMON ----------------
-
-  Widget _card(
-      {required String title,
-      required IconData icon,
-      required Widget child}) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+  Widget _sectionCard({required String title, required Widget child}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFDDE2EA)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Icon(icon, color: const Color(0xFF3B82F6)),
-              const SizedBox(width: 8),
-              Text(title,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13)),
-            ]),
-            const SizedBox(height: 16),
-            child,
-          ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 23,
+              color: Color(0xFF2B3A4A),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Divider(color: Colors.grey.shade300, height: 1),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _twoCol(Widget left, Widget right) {
+    return Row(
+      children: [
+        Expanded(child: left),
+        const SizedBox(width: 10),
+        Expanded(child: right),
+      ],
+    );
+  }
+
+  Widget _labelField(String label, TextEditingController controller) {
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: const Color(0xFFFBFBFC),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
         ),
       ),
     );
   }
 
-  Widget _rowFields(Widget a, Widget b) {
-    return Row(children: [
-      Expanded(child: a),
-      const SizedBox(width: 12),
-      Expanded(child: b),
-    ]);
-  }
-
-  Widget _textField({required String label, String? value, String? hint}) {
-    return TextField(
-      controller: value != null ? TextEditingController(text: value) : null,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        border: const OutlineInputBorder(),
-        filled: true,
-        fillColor: Colors.white,
-      ),
-    );
-  }
-
-  Widget _dropdown(String label, String value) {
-    return TextField(
-      readOnly: true,
-      controller: TextEditingController(text: value),
-      decoration: InputDecoration(
-        labelText: label,
-        suffixIcon: const Icon(Icons.arrow_drop_down),
-        border: const OutlineInputBorder(),
-        filled: true,
-        fillColor: Colors.white,
-      ),
-    );
-  }
-
-  Widget _dateField(
-      {required String label,
-      String? hint,
-      required TextEditingController controller}) {
+  Widget _dateField(String label, TextEditingController controller) {
     return TextField(
       controller: controller,
       readOnly: true,
       decoration: InputDecoration(
         labelText: label,
-        hintText: hint,
-        suffixIcon: const Icon(Icons.calendar_today, size: 18),
-        border: const OutlineInputBorder(),
+        hintText: 'dd/mm/yyyy',
+        suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: const Color(0xFFFBFBFC),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+        ),
       ),
       onTap: () async {
+        final now = DateTime.now();
         final picked = await showDatePicker(
           context: context,
-          initialDate: DateTime.now(),
+          initialDate: now,
           firstDate: DateTime(2020),
           lastDate: DateTime(2100),
         );
-        if (!mounted || picked == null) return;
+
+        if (!mounted || picked == null) {
+          return;
+        }
+
         controller.text =
-            "${picked.day.toString().padLeft(2, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.year}";
+            '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}';
       },
+    );
+  }
+
+  Widget _dropdownField({
+    required String label,
+    required String? value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+    required String hint,
+  }) {
+    return DropdownButtonFormField<String>(
+      initialValue: value,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: const Color(0xFFFBFBFC),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+        ),
+      ),
+      hint: Text(hint),
+      items: items
+          .map(
+            (item) => DropdownMenuItem<String>(
+              value: item,
+              child: Text(item),
+            ),
+          )
+          .toList(),
+      onChanged: onChanged,
     );
   }
 }
 
-// ---------------- MODEL ----------------
-
 class _PurchaseItem {
-  String name;
-  String code;
-  String qty;
+  String? name;
+  String? code;
+  String? details;
+  String? warehouse;
+  String? projectCode;
+  String? qty;
 
-  _PurchaseItem({
-    required this.name,
-    required this.code,
-    required this.qty,
-  });
+  _PurchaseItem();
 }

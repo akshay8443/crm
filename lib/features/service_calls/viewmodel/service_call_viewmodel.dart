@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
@@ -325,6 +327,92 @@ class ServiceCallViewModel {
     throw Exception('Get specific service call failed (${response.statusCode})');
   }
 
+  Future<Map<String, dynamic>> updateServiceCallStatus({
+    required String serviceNo,
+    required String currentStatus,
+  }) async {
+    final normalizedServiceNo = serviceNo.trim();
+    final normalizedStatus = currentStatus.trim();
+    if (normalizedServiceNo.isEmpty) {
+      throw Exception('ServiceNo is required for status update');
+    }
+    if (normalizedStatus.isEmpty) {
+      throw Exception('CurrentStatus is required for status update');
+    }
+
+    final uri = Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.updateServiceCallStatusPath}',
+    );
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'Authorization': ApiConstants.basicAuthorization,
+    };
+
+    final payloadAttempts = <Map<String, dynamic>>[
+      <String, dynamic>{
+        'ServiceCallNo': normalizedServiceNo,
+        'CurrentStatus': normalizedStatus,
+      },
+      <String, dynamic>{
+        'ServiceNo': normalizedServiceNo,
+        'CurrentStatus': normalizedStatus,
+      },
+      <String, dynamic>{
+        'serviceNo': normalizedServiceNo,
+        'currentStatus': normalizedStatus,
+      },
+    ];
+
+    String? lastError;
+    int? lastStatusCode;
+
+    for (final payload in payloadAttempts) {
+      print('UPDATE STATUS URL: $uri');
+      print('UPDATE STATUS HEADERS: $headers');
+      print('UPDATE STATUS REQUEST: ${jsonEncode(payload)}');
+
+      final response = await http
+          .post(uri, headers: headers, body: jsonEncode(payload))
+          .timeout(const Duration(seconds: 20));
+
+      print('UPDATE STATUS RESPONSE CODE: ${response.statusCode}');
+      print('UPDATE STATUS RESPONSE BODY: ${response.body}');
+
+      lastStatusCode = response.statusCode;
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (response.body.trim().isEmpty) {
+          return <String, dynamic>{'message': 'Status updated successfully'};
+        }
+        final dynamic decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) return decoded;
+        return <String, dynamic>{'data': decoded};
+      }
+
+      if (response.body.trim().isNotEmpty) {
+        try {
+          final dynamic decoded = jsonDecode(response.body);
+          if (decoded is Map<String, dynamic>) {
+            final message = (decoded['message'] ?? decoded['error'] ?? '')
+                .toString()
+                .trim();
+            if (message.isNotEmpty) {
+              lastError = message;
+            }
+          } else {
+            lastError = response.body.trim();
+          }
+        } catch (_) {
+          lastError = response.body.trim();
+        }
+      }
+    }
+
+    throw Exception(
+      lastError ??
+          'Update service call status failed (${lastStatusCode ?? 'unknown'})',
+    );
+  }
+
   Future<List<Map<String, dynamic>>> fetchServiceAttachments(
     String serviceNo,
   ) async {
@@ -467,16 +555,34 @@ class ServiceCallViewModel {
       ..fields['CustomerCode'] = normalizedCustomerCode;
 
     for (final file in files) {
-      final bytes = await file.readAsBytes();
       final resolvedName = file.name.trim().isNotEmpty
           ? file.name.trim()
           : _fallbackFileName(file.path);
+      if (!kIsWeb && file.path.trim().isNotEmpty) {
+        final localFile = File(file.path);
+        if (!await localFile.exists()) {
+          throw Exception('Attachment not found: $resolvedName');
+        }
+        final sizeInBytes = await localFile.length();
+        if (sizeInBytes <= 0) {
+          throw Exception('Attachment is empty: $resolvedName');
+        }
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'file',
+            file.path,
+            filename: resolvedName,
+          ),
+        );
+        continue;
+      }
+
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
+        throw Exception('Attachment is empty: $resolvedName');
+      }
       request.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          bytes,
-          filename: resolvedName,
-        ),
+        http.MultipartFile.fromBytes('file', bytes, filename: resolvedName),
       );
     }
 
@@ -485,7 +591,7 @@ class ServiceCallViewModel {
     print('UPLOAD IMAGE FILE COUNT: ${request.files.length}');
 
     final streamedResponse =
-        await request.send().timeout(const Duration(seconds: 60));
+        await request.send().timeout(const Duration(seconds: 180));
     final responseBody = await streamedResponse.stream.bytesToString();
 
     print('UPLOAD IMAGE STATUS: ${streamedResponse.statusCode}');
