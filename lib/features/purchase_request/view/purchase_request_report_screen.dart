@@ -1,5 +1,9 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
 
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+import '../../../core/constants/api_constants.dart';
 import 'purchase_request_static_data.dart';
 
 class PurchaseRequestReportScreen extends StatefulWidget {
@@ -20,137 +24,15 @@ class _PurchaseRequestReportScreenState
 
   String _priorityFilter = '';
   String _departmentFilter = '';
+  bool _isLoading = false;
 
-  final List<_PurchaseRequestRow> _rows = const [
-    _PurchaseRequestRow(
-      'PR-000027',
-      '',
-      '21-Mar-2026',
-      'Select Priority',
-      'Select Department',
-      '',
-    ),
-    _PurchaseRequestRow(
-      'PR-000026',
-      '',
-      '21-Mar-2026',
-      'Select Priority',
-      'Select Department',
-      '',
-    ),
-    _PurchaseRequestRow(
-      'PR-000019',
-      '',
-      '21-Mar-2026',
-      'Select Priority',
-      'Select Department',
-      '',
-    ),
-    _PurchaseRequestRow(
-      'PR-000016',
-      '100',
-      '21-Mar-2026',
-      'Low',
-      'Engineering',
-      'aaa',
-    ),
-    _PurchaseRequestRow(
-      'PR-000015',
-      '101',
-      '21-Mar-2026',
-      'Medium',
-      'R&D',
-      'test',
-    ),
-    _PurchaseRequestRow(
-      'PR-000014',
-      '101',
-      '21-Mar-2026',
-      'Low',
-      'Supply Chain Mgmt',
-      'ytttt',
-    ),
-    _PurchaseRequestRow(
-      'PR-000013',
-      '100',
-      '21-Mar-2026',
-      'Medium',
-      'Support',
-      '',
-    ),
-    _PurchaseRequestRow(
-      'PR-000011',
-      '101',
-      '20-Mar-2026',
-      'Low',
-      'R&D',
-      'testing',
-    ),
-    _PurchaseRequestRow(
-      'PR-000010',
-      '100',
-      '20-Mar-2026',
-      'High',
-      'Engineering',
-      'ABC',
-    ),
-    _PurchaseRequestRow(
-      'PR-000009',
-      '101',
-      '20-Mar-2026',
-      'Low',
-      'Select Department',
-      '',
-    ),
-    _PurchaseRequestRow(
-      'PR-000007',
-      '10',
-      '20-Mar-2026',
-      'High',
-      'Select Department',
-      'abcd',
-    ),
-    _PurchaseRequestRow(
-      'PR-000006',
-      '1011',
-      '20-Mar-2026',
-      'Medium',
-      'Support',
-      'TESTINg2',
-    ),
-    _PurchaseRequestRow(
-      'PR-000005',
-      '101',
-      '20-Mar-2026',
-      'Medium',
-      'R&D',
-      'testing',
-    ),
-    _PurchaseRequestRow(
-      'PR-000003',
-      '100',
-      '20-Mar-2026',
-      'Low',
-      'Supply Chain Mgmt',
-      'testing',
-    ),
-    _PurchaseRequestRow(
-      'PR-000002',
-      '2329',
-      '20-Mar-2026',
-      'Low',
-      'Select Department',
-      'testing2',
-    ),
-    _PurchaseRequestRow(
-      'PR-000001',
-      '10',
-      '20-Mar-2026',
-      'Low',
-      'Supply Chain Mgmt',
-      'testing',
-    ),
-  ];
+  List<_PurchaseRequestRow> _rows = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchAllPurchaseRequests();
+  }
 
   @override
   void dispose() {
@@ -177,7 +59,9 @@ class _PurchaseRequestReportScreenState
                 _buildHeader(),
                 _buildFilters(isMobile),
                 Expanded(
-                  child: isMobile
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : isMobile
                       ? _buildMobileList(filteredRows)
                       : _buildTableView(filteredRows),
                 ),
@@ -187,6 +71,125 @@ class _PurchaseRequestReportScreenState
         ),
       ),
     );
+  }
+
+  Uri _buildNoCacheUri(String path) {
+    final uri = Uri.parse('${ApiConstants.baseUrl}$path');
+    final params = Map<String, String>.from(uri.queryParameters);
+    params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
+    return uri.replace(queryParameters: params);
+  }
+
+  Map<String, String> _getHeaders() {
+    return <String, String>{
+      'Accept': 'application/json',
+      'Authorization': ApiConstants.basicAuthorization,
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+    };
+  }
+
+  Future<void> _fetchAllPurchaseRequests() async {
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getAllPurchaseRequestPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 25));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Get all purchase request failed (${response.statusCode})');
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from purchase request report API');
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid purchase request report response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid purchase request report response format');
+      }
+
+      final mappedRows = <_PurchaseRequestRow>[];
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) continue;
+        mappedRows.add(
+          _PurchaseRequestRow(
+            _readValue(row, const ['DocNo', 'DocNum', 'DocumentNo']),
+            _readValue(row, const ['Requester']),
+            _formatApiDate(
+              _readValue(row, const ['DocDate', 'DocumentDate']),
+            ),
+            _readValue(row, const ['Priority']),
+            _readValue(row, const ['ResponsibleDept', 'ReqToDept', 'Department']),
+            _readValue(row, const ['Remarks']),
+          ),
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _rows = mappedRows;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load purchase request list')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  String _readValue(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key];
+      if (value != null) {
+        final normalized = value.toString().trim();
+        if (normalized.isNotEmpty) {
+          return normalized;
+        }
+      }
+    }
+    return '';
+  }
+
+  String _formatApiDate(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return '';
+    final parsed = DateTime.tryParse(text);
+    if (parsed == null) return text;
+    const months = <String>[
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final day = parsed.day.toString().padLeft(2, '0');
+    final month = months[parsed.month - 1];
+    return '$day-$month-${parsed.year}';
   }
 
   Widget _buildHeader() {

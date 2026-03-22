@@ -18,13 +18,18 @@ class ApiConstants {
       '/api/GetPurchaseSalesorderNo';
   static const String getPurchaseServiceCallNoPath =
       '/api/GetPurchaseServiceCallNo';
+  static const String getNextPurchaseRequestPath =
+      '/api/GetNextPurchaserequest';
   static const String getNextServiceNoPath = '/api/GetNextServiceNo';
   static const String getAllServiceCallPath = '/api/GetAllserviceCall';
+  static const String getAllPurchaseRequestPath = '/api/GetAllPurchaseRequest';
   static const String getSpecficServiceCallPath = '/api/GetSpecficserviceCall';
   static const String updateServiceCallStatusPath =
       '/api/updateservicecallstatus';
   static const String getAttachmentsPath = '/api/GetAttachments';
   static const String uploadImagePath = '/api/UploadImage';
+  static const String uploadPurchaseRequestFilePath =
+      '/api/UploadPurchaseRequestFile';
   static const String basicAuthorization =
       'Basic cnpwX2xpdmVfYUM3YUNDa0dLSmZ0OHE6TU1KcnBneHgzY2dTcWtUaVJiN0lLemg1';
 }

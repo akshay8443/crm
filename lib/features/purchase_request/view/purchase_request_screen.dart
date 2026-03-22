@@ -57,6 +57,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
   @override
   void initState() {
     super.initState();
+    _fetchNextPurchaseRequestNo();
     _fetchPurchaseEmployees();
     _fetchPurchaseItems();
     _fetchPurchaseWarehouses();
@@ -102,6 +103,53 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       'Cache-Control': 'no-cache',
       'Pragma': 'no-cache',
     };
+  }
+
+  Future<void> _fetchNextPurchaseRequestNo() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getNextPurchaseRequestPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'Get next purchase request no failed (${response.statusCode})',
+        );
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from next purchase request no API');
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      final String docNo;
+      if (decoded is List && decoded.isNotEmpty) {
+        final first = decoded.first;
+        if (first is! Map<String, dynamic>) {
+          throw Exception('Invalid next purchase request no response format');
+        }
+        docNo = _readValue(first, <String>[
+          'PurchaserequestNo',
+          'PurchaseRequestNo',
+          'DocNo',
+        ]);
+      } else if (decoded is Map<String, dynamic>) {
+        docNo = _readValue(decoded, <String>[
+          'PurchaserequestNo',
+          'PurchaseRequestNo',
+          'DocNo',
+        ]);
+      } else {
+        throw Exception('Invalid next purchase request no response format');
+      }
+
+      if (docNo.isEmpty || !mounted) return;
+      setState(() {
+        _docNoController.text = docNo;
+      });
+    } catch (_) {
+      // Keep existing doc no fallback if API fails.
+    }
   }
 
   Future<void> _fetchPurchaseEmployees() async {
@@ -1061,8 +1109,20 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           if (serverMessage != null && serverMessage.isNotEmpty) {
             message = serverMessage;
           }
+
+          final serverDocNo = _readValue(decoded, <String>[
+            'DocNo',
+            'DocNum',
+            'PurchaserequestNo',
+            'PurchaseRequestNo',
+          ]);
+          if (serverDocNo.isNotEmpty) {
+            _docNoController.text = serverDocNo;
+          }
         }
       }
+
+      await _uploadPurchaseRequestAttachments(_docNoController.text.trim());
 
       if (!mounted) return;
       await showDialog<void>(
@@ -1093,6 +1153,41 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
         setState(() {
           _isSubmitting = false;
         });
+      }
+    }
+  }
+
+  Future<void> _uploadPurchaseRequestAttachments(String docNo) async {
+    if (_attachments.isEmpty || docNo.isEmpty) {
+      return;
+    }
+
+    final uri = Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.uploadPurchaseRequestFilePath}',
+    );
+
+    for (final file in _attachments) {
+      final fileBytes = await file.readAsBytes();
+      final request = http.MultipartRequest('POST', uri)
+        ..headers.addAll(<String, String>{
+          'Authorization': ApiConstants.basicAuthorization,
+          'Accept': 'application/json',
+        })
+        ..fields['DocNo'] = docNo
+        ..files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            fileBytes,
+            filename: file.name,
+          ),
+        );
+
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 30),
+      );
+      final response = await http.Response.fromStream(streamedResponse);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Attachment upload failed (${response.statusCode})');
       }
     }
   }
