@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../core/constants/api_constants.dart';
+import 'purchase_request_screen.dart';
 import 'purchase_request_static_data.dart';
 
 class PurchaseRequestReportScreen extends StatefulWidget {
@@ -100,7 +101,9 @@ class _PurchaseRequestReportScreenState
           .timeout(const Duration(seconds: 25));
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('Get all purchase request failed (${response.statusCode})');
+        throw Exception(
+          'Get all purchase request failed (${response.statusCode})',
+        );
       }
       if (response.body.isEmpty) {
         throw Exception('Empty response from purchase request report API');
@@ -127,11 +130,13 @@ class _PurchaseRequestReportScreenState
           _PurchaseRequestRow(
             _readValue(row, const ['DocNo', 'DocNum', 'DocumentNo']),
             _readValue(row, const ['Requester']),
-            _formatApiDate(
-              _readValue(row, const ['DocDate', 'DocumentDate']),
-            ),
+            _formatApiDate(_readValue(row, const ['DocDate', 'DocumentDate'])),
             _readValue(row, const ['Priority']),
-            _readValue(row, const ['ResponsibleDept', 'ReqToDept', 'Department']),
+            _readValue(row, const [
+              'ResponsibleDept',
+              'ReqToDept',
+              'Department',
+            ]),
             _readValue(row, const ['Remarks']),
           ),
         );
@@ -190,6 +195,22 @@ class _PurchaseRequestReportScreenState
     final day = parsed.day.toString().padLeft(2, '0');
     final month = months[parsed.month - 1];
     return '$day-$month-${parsed.year}';
+  }
+
+  void _openPurchaseRequest(_PurchaseRequestRow row) {
+    final docNo = row.docNo.trim();
+    if (docNo.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Doc No is missing')));
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PurchaseRequestScreen(initialDocNo: docNo),
+      ),
+    );
   }
 
   Widget _buildHeader() {
@@ -330,7 +351,12 @@ class _PurchaseRequestReportScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _mobileRow('Doc No', row.docNo, isLink: true),
+              _mobileRow(
+                'Doc No',
+                row.docNo,
+                isLink: true,
+                onTap: () => _openPurchaseRequest(row),
+              ),
               _mobileRow(
                 'Requester',
                 row.requester.isEmpty ? '-' : row.requester,
@@ -346,7 +372,12 @@ class _PurchaseRequestReportScreenState
     );
   }
 
-  Widget _mobileRow(String label, String value, {bool isLink = false}) {
+  Widget _mobileRow(
+    String label,
+    String value, {
+    bool isLink = false,
+    VoidCallback? onTap,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
@@ -363,14 +394,17 @@ class _PurchaseRequestReportScreenState
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                color: isLink
-                    ? const Color(0xFF2437A5)
-                    : const Color(0xFF1E2433),
-                decoration: isLink ? TextDecoration.underline : null,
-                fontWeight: isLink ? FontWeight.w600 : FontWeight.w400,
+            child: GestureDetector(
+              onTap: onTap,
+              child: Text(
+                value,
+                style: TextStyle(
+                  color: isLink
+                      ? const Color(0xFF2437A5)
+                      : const Color(0xFF1E2433),
+                  decoration: isLink ? TextDecoration.underline : null,
+                  fontWeight: isLink ? FontWeight.w600 : FontWeight.w400,
+                ),
               ),
             ),
           ),
@@ -456,6 +490,7 @@ class _PurchaseRequestReportScreenState
                             decoration: TextDecoration.underline,
                           ),
                         ),
+                        onTap: () => _openPurchaseRequest(row),
                       ),
                       DataCell(Text(row.requester)),
                       DataCell(Text(row.docDate)),

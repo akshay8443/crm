@@ -1,7 +1,9 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
@@ -9,7 +11,9 @@ import '../../../core/constants/api_constants.dart';
 import 'purchase_request_static_data.dart';
 
 class PurchaseRequestScreen extends StatefulWidget {
-  const PurchaseRequestScreen({super.key});
+  const PurchaseRequestScreen({super.key, this.initialDocNo});
+
+  final String? initialDocNo;
 
   @override
   State<PurchaseRequestScreen> createState() => _PurchaseRequestScreenState();
@@ -37,11 +41,11 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
   final _serviceCallController = TextEditingController();
   final _salesOrderController = TextEditingController();
 
-  String? _requirementType = 'Select Type';
+  String? _requirementType;
   String? _responsibleDepartment;
-  String? _natureOfProcurement = 'Select Type';
-  String? _privateClient = 'Select Option';
-  String? _priority = 'Select Priority';
+  String? _natureOfProcurement;
+  String? _privateClient;
+  String? _priority;
   String? _requesterName;
   String? _ownerName;
   String? _requisitionToDepartment;
@@ -51,13 +55,18 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
   List<_CodeNameOption> _warehouseOptions = const [];
   List<_CodeNameOption> _projectOptions = const [];
   List<_SalesOrderOption> _salesOrderOptions = const [];
-  List<_CodeNameOption> _serviceCallOptions = const [];
+  List<_ServiceCallOption> _serviceCallOptions = const [];
   bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
-    _fetchNextPurchaseRequestNo();
+    final initialDocNo = widget.initialDocNo?.trim() ?? '';
+    if (initialDocNo.isNotEmpty) {
+      _docNoController.text = initialDocNo;
+    } else {
+      _fetchNextPurchaseRequestNo();
+    }
     _fetchPurchaseEmployees();
     _fetchPurchaseItems();
     _fetchPurchaseWarehouses();
@@ -479,14 +488,19 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           'DocDate',
           'Date',
         ]);
+        final formattedSoDate = _formatDisplayDate(soDate);
 
         if (soNo.isEmpty) continue;
         final key =
-            '${soNo.toLowerCase()}|${customer.toLowerCase()}|${soDate.toLowerCase()}';
+            '${soNo.toLowerCase()}|${customer.toLowerCase()}|${formattedSoDate.toLowerCase()}';
         if (unique.contains(key)) continue;
         unique.add(key);
         options.add(
-          _SalesOrderOption(soNo: soNo, customer: customer, soDate: soDate),
+          _SalesOrderOption(
+            soNo: soNo,
+            customer: customer,
+            soDate: formattedSoDate,
+          ),
         );
       }
 
@@ -532,7 +546,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
         throw Exception('Invalid purchase service call response format');
       }
 
-      final options = <_CodeNameOption>[];
+      final options = <_ServiceCallOption>[];
       final unique = <String>{};
       for (final row in rows) {
         if (row is! Map<String, dynamic>) continue;
@@ -550,13 +564,26 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           'Customer',
           'CardName',
         ]);
+        final serviceCallDate = _formatDisplayDate(
+          _readValue(row, <String>[
+            'ServiceCallDate',
+            'CallDate',
+            'CreatedDate',
+            'DocDate',
+            'Date',
+          ]),
+        );
         if (serviceCallNo.isEmpty) continue;
         final key =
-            '${serviceCallNo.toLowerCase()}|${businessPartner.toLowerCase()}';
+            '${serviceCallNo.toLowerCase()}|${businessPartner.toLowerCase()}|${serviceCallDate.toLowerCase()}';
         if (unique.contains(key)) continue;
         unique.add(key);
         options.add(
-          _CodeNameOption(code: serviceCallNo, name: businessPartner),
+          _ServiceCallOption(
+            serviceCallNo: serviceCallNo,
+            businessPartner: businessPartner,
+            serviceCallDate: serviceCallDate,
+          ),
         );
       }
 
@@ -727,9 +754,9 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     }
     if (!mounted) return;
 
-    final selected = await _openCodeNamePicker(
+    final selected = await _openServiceCallPickerBottomSheet(
       options: _serviceCallOptions,
-      searchHint: 'Search ServiceCallNo / BusinessPartner',
+      searchHint: 'Search ServiceCallNo / BusinessPartner / Date',
       emptyText: 'No service call found',
     );
     if (!mounted || selected == null) return;
@@ -737,6 +764,89 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     setState(() {
       _serviceCallController.text = selected.displayLabel;
     });
+  }
+
+  Future<_ServiceCallOption?> _openServiceCallPickerBottomSheet({
+    required List<_ServiceCallOption> options,
+    required String searchHint,
+    required String emptyText,
+  }) async {
+    return showModalBottomSheet<_ServiceCallOption>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filtered = options.where((option) {
+              final q = query.trim().toLowerCase();
+              if (q.isEmpty) return true;
+              return option.serviceCallNo.toLowerCase().contains(q) ||
+                  option.businessPartner.toLowerCase().contains(q) ||
+                  option.serviceCallDate.toLowerCase().contains(q) ||
+                  option.displayLabel.toLowerCase().contains(q);
+            }).toList();
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 12,
+                  bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 12,
+                ),
+                child: SizedBox(
+                  height: 420,
+                  child: Column(
+                    children: [
+                      TextField(
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: searchHint,
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          fillColor: const Color(0xFFFBFBFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFD7DCE4),
+                            ),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          setModalState(() {
+                            query = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: filtered.isEmpty
+                            ? Center(child: Text(emptyText))
+                            : ListView.separated(
+                                itemCount: filtered.length,
+                                separatorBuilder: (_, _) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final option = filtered[index];
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(option.displayLabel),
+                                    onTap: () =>
+                                        Navigator.pop(sheetContext, option),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<_CodeNameOption?> _openCodeNamePicker({
@@ -855,7 +965,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: OutlinedButton(
-              onPressed: () {},
+              onPressed: () => Navigator.maybePop(context),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white,
                 side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
@@ -1050,6 +1160,8 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       'Requester': _requesterNameController.text.trim(),
       'Owner': _ownerNameController.text.trim(),
       'ReqToDept': _requisitionToDepartment ?? '',
+      'RequisitionToDepartment': _requisitionToDepartment ?? '',
+      'Department': _responsibleDepartment ?? _requisitionToDepartment ?? '',
       'ReqTo': _reqToController.text.trim(),
       'RequirementType': _requirementType ?? '',
       'ReplacementExplanation': _explanationController.text.trim().isEmpty
@@ -1122,6 +1234,12 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
         }
       }
 
+      final purchaseRequestNo = _docNoController.text.trim();
+      if (purchaseRequestNo.isNotEmpty &&
+          !message.toLowerCase().contains(purchaseRequestNo.toLowerCase())) {
+        message = '$message\nPurchase Request No: $purchaseRequestNo';
+      }
+
       await _uploadPurchaseRequestAttachments(_docNoController.text.trim());
 
       if (!mounted) return;
@@ -1175,11 +1293,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
         })
         ..fields['DocNo'] = docNo
         ..files.add(
-          http.MultipartFile.fromBytes(
-            'file',
-            fileBytes,
-            filename: file.name,
-          ),
+          http.MultipartFile.fromBytes('file', fileBytes, filename: file.name),
         );
 
       final streamedResponse = await request.send().timeout(
@@ -1212,6 +1326,38 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     final month = match.group(2)!;
     final year = match.group(3)!;
     return '$year-$month-$day';
+  }
+
+  String _formatDisplayDate(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return '';
+
+    final parsed = DateTime.tryParse(text);
+    if (parsed != null) {
+      final day = parsed.day.toString().padLeft(2, '0');
+      final month = parsed.month.toString().padLeft(2, '0');
+      return '$day-$month-${parsed.year}';
+    }
+
+    final slashMatch = RegExp(
+      r'^(\d{1,2})/(\d{1,2})/(\d{4})$',
+    ).firstMatch(text);
+    if (slashMatch != null) {
+      final day = slashMatch.group(1)!.padLeft(2, '0');
+      final month = slashMatch.group(2)!.padLeft(2, '0');
+      final year = slashMatch.group(3)!;
+      return '$day-$month-$year';
+    }
+
+    final dashMatch = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})$').firstMatch(text);
+    if (dashMatch != null) {
+      final year = dashMatch.group(1)!;
+      final month = dashMatch.group(2)!.padLeft(2, '0');
+      final day = dashMatch.group(3)!.padLeft(2, '0');
+      return '$day-$month-$year';
+    }
+
+    return text;
   }
 
   Future<void> _openUploadOptions() async {
@@ -1252,6 +1398,18 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
 
   Future<void> _pickFromCamera() async {
     try {
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.windows ||
+              defaultTargetPlatform == TargetPlatform.linux)) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Camera is not supported on this platform'),
+          ),
+        );
+        return;
+      }
+
       final photo = await _imagePicker.pickImage(source: ImageSource.camera);
       if (!mounted || photo == null) {
         return;
@@ -1260,13 +1418,40 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       setState(() {
         _attachments.add(photo);
       });
-    } catch (_) {
+    } on MissingPluginException {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Image picker plugin not loaded. Please reinstall and run again.',
+          ),
+        ),
+      );
+    } on PlatformException catch (e) {
+      if (!mounted) {
+        return;
+      }
+      final code = e.code.toLowerCase();
+      if (code.contains('permission')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Permission denied. Please allow camera access.'),
+          ),
+        );
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to open camera (${e.code})')),
+      );
+    } catch (e) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Unable to open camera')));
+      ).showSnackBar(SnackBar(content: Text('Unable to open camera. $e')));
     }
   }
 
@@ -1280,12 +1465,41 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       setState(() {
         _attachments.addAll(files);
       });
-    } catch (_) {
+    } on MissingPluginException {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to pick files from gallery')),
+        const SnackBar(
+          content: Text(
+            'Image picker plugin not loaded. Please reinstall and run again.',
+          ),
+        ),
+      );
+    } on PlatformException catch (e) {
+      if (!mounted) {
+        return;
+      }
+      final code = e.code.toLowerCase();
+      if (code.contains('permission')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Permission denied. Please allow photos/media library access.',
+            ),
+          ),
+        );
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to open gallery (${e.code})')),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to pick files from gallery. $e')),
       );
     }
   }
@@ -1320,12 +1534,12 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           _dropdownField(
             label: 'Requisition To Department',
             value: _requisitionToDepartment,
-            items: const ['IT', 'Engineering', 'Support', 'R&D'],
+            items: kDepartmentOptions,
             onChanged: (value) => setState(() {
               _requisitionToDepartment = value;
               _reqDepartmentController.text = value ?? '';
             }),
-            hint: 'Select Type',
+            hint: 'Search Department',
           ),
           const SizedBox(height: 10),
           _dropdownField(
@@ -1342,9 +1556,9 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           _dropdownField(
             label: 'Requirement Type',
             value: _requirementType,
-            items: const ['Select Type', 'New Rquirement', 'Replacement'],
+            items: const ['New Requirement', 'Replacement'],
             onChanged: (value) => setState(() => _requirementType = value),
-            hint: 'Select Type',
+            hint: 'Search Requirement Type',
           ),
           const SizedBox(height: 10),
           _labelField(
@@ -1367,7 +1581,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
             readOnly: true,
             decoration: InputDecoration(
               labelText: 'Service Call No',
-              hintText: 'Search ServiceCallNo / BP',
+              hintText: 'Search ServiceCallNo / BP / Date',
               filled: true,
               fillColor: const Color(0xFFFBFBFC),
               suffixIcon: const Icon(Icons.arrow_drop_down),
@@ -1415,7 +1629,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           _dropdownField(
             label: 'Responsible Department',
             value: _responsibleDepartment,
-            items: kDepartmentOptions,
+            items: kResponsibleDepartmentOptions,
             onChanged: (value) =>
                 setState(() => _responsibleDepartment = value),
             hint: 'Select Department',
@@ -1424,16 +1638,15 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           _dropdownField(
             label: 'Priority',
             value: _priority,
-            items: const ['Select Priority', 'High', 'Low', 'Medium', 'Urgent'],
+            items: const ['High', 'Low', 'Medium', 'Urgent'],
             onChanged: (value) => setState(() => _priority = value),
-            hint: 'Select Priority',
+            hint: 'Search Priority',
           ),
           const SizedBox(height: 10),
           _dropdownField(
             label: 'Nature of Procurement',
             value: _natureOfProcurement,
             items: const [
-              'Select Type',
               'Existing Project',
               'AddOn Project',
               'CAMC',
@@ -1442,15 +1655,15 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
               'Upgradation',
             ],
             onChanged: (value) => setState(() => _natureOfProcurement = value),
-            hint: 'Select Type',
+            hint: 'Search Nature',
           ),
           const SizedBox(height: 10),
           _dropdownField(
             label: 'Private Client',
             value: _privateClient,
-            items: const ['Select Option', 'Yes', 'No'],
+            items: const ['Yes', 'No'],
             onChanged: (value) => setState(() => _privateClient = value),
-            hint: 'Select Option',
+            hint: 'Search Option',
           ),
           const SizedBox(height: 10),
           _labelField('Ship To', _shipToController),
@@ -1946,33 +2159,118 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     required ValueChanged<String?> onChanged,
     required String hint,
   }) {
-    return DropdownButtonFormField<String>(
-      initialValue: value,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: label,
-        filled: true,
-        fillColor: const Color(0xFFFBFBFC),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
+    return InkWell(
+      onTap: () async {
+        final selected = await _openTextPicker(
+          options: items,
+          searchHint: hint,
+          emptyText: 'No data found',
+        );
+        if (selected == null) return;
+        onChanged(selected);
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: (value ?? '').trim().isEmpty ? hint : null,
+          filled: true,
+          fillColor: const Color(0xFFFBFBFC),
+          suffixIcon: const Icon(Icons.arrow_drop_down),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+          ),
         ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
-        ),
+        child: Text(value?.trim().isNotEmpty == true ? value! : ''),
       ),
-      hint: Text(hint),
-      items: items
-          .map(
-            (item) => DropdownMenuItem<String>(value: item, child: Text(item)),
-          )
-          .toList(),
-      onChanged: onChanged,
+    );
+  }
+
+  Future<String?> _openTextPicker({
+    required List<String> options,
+    required String searchHint,
+    required String emptyText,
+  }) async {
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filtered = options.where((option) {
+              final q = query.trim().toLowerCase();
+              if (q.isEmpty) return true;
+              return option.toLowerCase().contains(q);
+            }).toList();
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 12,
+                  bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 12,
+                ),
+                child: SizedBox(
+                  height: 420,
+                  child: Column(
+                    children: [
+                      TextField(
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: searchHint,
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          fillColor: const Color(0xFFFBFBFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFD7DCE4),
+                            ),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          setModalState(() {
+                            query = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: filtered.isEmpty
+                            ? Center(child: Text(emptyText))
+                            : ListView.separated(
+                                itemCount: filtered.length,
+                                separatorBuilder: (_, _) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final option = filtered[index];
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(option),
+                                    onTap: () =>
+                                        Navigator.pop(sheetContext, option),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -2027,6 +2325,29 @@ class _SalesOrderOption {
     }
     if (soDate.isNotEmpty) {
       parts.add(soDate);
+    }
+    return parts.join(' - ');
+  }
+}
+
+class _ServiceCallOption {
+  const _ServiceCallOption({
+    required this.serviceCallNo,
+    required this.businessPartner,
+    required this.serviceCallDate,
+  });
+
+  final String serviceCallNo;
+  final String businessPartner;
+  final String serviceCallDate;
+
+  String get displayLabel {
+    final parts = <String>[serviceCallNo];
+    if (businessPartner.isNotEmpty) {
+      parts.add(businessPartner);
+    }
+    if (serviceCallDate.isNotEmpty) {
+      parts.add(serviceCallDate);
     }
     return parts.join(' - ');
   }
