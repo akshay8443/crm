@@ -5,12 +5,14 @@ class ServiceCallRequest {
   final String email;
   final String contractNo;
   final String itemCode;
+  final String itemName;
   final String serialNumber;
   final String mfrSerialno;
   final String currentStatus;
   final String priority;
   final String assignedTech;
   final String serviceType;
+  final String department;
   final String serviceNo;
   final String createdDate;
   final String? closedDate;
@@ -37,12 +39,14 @@ class ServiceCallRequest {
     required this.email,
     required this.contractNo,
     required this.itemCode,
+    required this.itemName,
     required this.serialNumber,
     required this.mfrSerialno,
     required this.currentStatus,
     required this.priority,
     required this.assignedTech,
     required this.serviceType,
+    required this.department,
     required this.serviceNo,
     required this.createdDate,
     this.closedDate,
@@ -71,12 +75,14 @@ class ServiceCallRequest {
       'email': email,
       'contractNo': contractNo,
       'itemCode': itemCode,
+      'itemName': itemName,
       'serialNumber': serialNumber,
       'mfrSerialno': mfrSerialno,
       'currentStatus': currentStatus,
       'priority': priority,
       'assignedTech': assignedTech,
       'serviceType': serviceType,
+      'department': department,
       'serviceNo': serviceNo,
       'createdDate': createdDate,
       'closedDate': closedDate,

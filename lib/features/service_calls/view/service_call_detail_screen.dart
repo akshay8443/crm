@@ -334,14 +334,15 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
       ]),
       _section('Tour', <Widget>[
         _infoTile('Tour Claim', _valueFor(const ['TourClaim'])),
-        _infoTile('Tour Start Date', _valueFor(const ['TourStartDate'])),
-        _infoTile('Tour End Date', _valueFor(const ['TourEndDate'])),
+        _infoTile('Tour Start Date', _dateOnlyValueFor(const ['TourStartDate'])),
+        _infoTile('Tour End Date', _dateOnlyValueFor(const ['TourEndDate'])),
         _infoTile('Tour Location', _valueFor(const ['TourLocation'])),
       ]),
       _section('Additional', <Widget>[
         _infoTile('Subjects', _valueFor(const ['Subjects'])),
         _infoTile('Repair Assessment', _valueFor(const ['RepairAssesmentType'])),
         _infoTile('Project Code', _valueFor(const ['ProjectCode'])),
+        _infoTile('Department', _valueFor(const ['Department'])),
         _infoTile('Chargeable', _valueFor(const ['Chargeable'])),
         _infoTile('Expense Amount', _valueFor(const ['ExpenseAmount'])),
         _infoTile('Remarks', _valueFor(const ['Remarks'])),
@@ -439,5 +440,15 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
   String _valueFor(List<String> keys) {
     final value = _rawValueFor(keys);
     return value ?? '-';
+  }
+
+  String _dateOnlyValueFor(List<String> keys) {
+    final raw = _rawValueFor(keys);
+    if (raw == null) return '-';
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return raw;
+    final day = parsed.day.toString().padLeft(2, '0');
+    final month = parsed.month.toString().padLeft(2, '0');
+    return '$day/$month/${parsed.year}';
   }
 }

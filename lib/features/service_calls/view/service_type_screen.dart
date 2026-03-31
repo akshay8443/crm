@@ -308,8 +308,8 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
   DateTime? closedDate;
   DateTime createdDate = DateTime.now();
   DateTime _lastUserPointerDownAt = DateTime.fromMillisecondsSinceEpoch(0);
-  int _detailsTabIndex = 0;
   final List<XFile> _attachments = [];
+  bool get _isTourClaimYes => tourClaim.trim().toLowerCase() == 'yes';
 
   // ---------------- Dropdown Values ----------------
   String ticketStatus = "Select Status";
@@ -479,6 +479,18 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
         .toList();
   }
 
+  List<ContractData> get _selectedProductRows {
+    final rows = _selectedContractRows;
+    final selectedItemCode = itemCode.trim();
+    if (selectedItemCode.isNotEmpty &&
+        !_isSameValue(selectedItemCode, _selectItemCode)) {
+      return rows
+          .where((row) => _isSameValue(row.itemNo, selectedItemCode))
+          .toList();
+    }
+    return rows;
+  }
+
   List<String> get _itemCodeItems => _buildOptions(
     _selectedContractRows.map((row) => row.itemNo),
     _selectItemCode,
@@ -490,12 +502,12 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
   );
 
   List<String> get _mfrSerialItems => _buildOptions(
-    _selectedContractRows.map((row) => row.mfrSerialNo),
+    _selectedProductRows.map((row) => row.mfrSerialNo),
     _selectMfrSerialNo,
   );
 
   List<String> get _serialNumberItems => _buildOptions(
-    _selectedContractRows.map((row) => row.serialNumber),
+    _selectedProductRows.map((row) => row.serialNumber),
     _selectSerialNumber,
   );
 
@@ -1256,26 +1268,46 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                       "Tour Start Date",
                       date: tourStartDate,
                       controller: tourStartDateCtrl,
+                      errorText: _showValidationErrors &&
+                              _isTourClaimYes &&
+                              tourStartDate == null
+                          ? "Please select Tour Start Date"
+                          : null,
                       onPicked: (d) => setState(() {
                         tourStartDate = d;
                         tourStartDateCtrl.text = _formatDate(d);
+                        if (tourEndDate != null && tourEndDate!.isBefore(d)) {
+                          tourEndDate = null;
+                          tourEndDateCtrl.clear();
+                        }
                       }),
                     ),
                     _datePicker(
                       "Tour End Date",
                       date: tourEndDate,
                       controller: tourEndDateCtrl,
+                      firstDate: tourStartDate ?? DateTime(2000),
+                      errorText: _showValidationErrors &&
+                              _isTourClaimYes &&
+                              tourEndDate == null
+                          ? "Please select Tour End Date"
+                          : null,
                       onPicked: (d) => setState(() {
                         tourEndDate = d;
                         tourEndDateCtrl.text = _formatDate(d);
                       }),
                     ),
                     _field(
-                      "Total Expense Amount",
+                      "Tour Expense Amount",
                       expenseCtrl,
                       keyboard: TextInputType.number,
+                      requiredField: _isTourClaimYes,
                     ),
-                    _field("Tour Location", tourLocationCtrl),
+                    _field(
+                      "Tour Location",
+                      tourLocationCtrl,
+                      requiredField: _isTourClaimYes,
+                    ),
                     _dropdown(
                       "Repair Assessment Type",
                       repairAssessment,
@@ -1359,6 +1391,40 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                 "Administrative",
                 Column(
                   children: [
+                    TextFormField(
+                      controller: subjectCtrl,
+                      maxLines: 3,
+                      validator: (value) {
+                        if ((value ?? '').trim().isEmpty) {
+                          return "Please enter Subject";
+                        }
+                        return null;
+                      },
+                      decoration: const InputDecoration(
+                        labelText: "Subject",
+                        hintText: "Enter subject details",
+                        border: OutlineInputBorder(),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Color(0xFFBDBDBD)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Color(0xFF2563EB),
+                            width: 1.5,
+                          ),
+                        ),
+                        errorBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.red),
+                        ),
+                        focusedErrorBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Colors.red,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     _field(
                       "Service No",
                       serviceNoCtrl,
@@ -1407,217 +1473,138 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
               ),
 
               _section(
-                "Details",
-                DefaultTabController(
-                  length: 2,
-                  child: Column(
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF3F4F6),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: TabBar(
-                          labelColor: Colors.white,
-                          unselectedLabelColor: const Color(0xFF374151),
-                          indicator: BoxDecoration(
-                            color: const Color(0xFF6D28D9),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          indicatorSize: TabBarIndicatorSize.tab,
-                          dividerColor: Colors.transparent,
-                          labelStyle: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          unselectedLabelStyle: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          tabs: const [
-                            Tab(text: "Subject"),
-                            Tab(text: "Attachments"),
-                          ],
-                          onTap: (index) {
-                            _safeUnfocus();
-                            setState(() {
-                              _detailsTabIndex = index;
-                            });
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeInOut,
-                        child: _detailsTabIndex == 0
-                            ? TextFormField(
-                                controller: subjectCtrl,
-                                maxLines: 3,
-                                validator: (value) {
-                                  if ((value ?? '').trim().isEmpty) {
-                                    return "Please enter Subject";
-                                  }
-                                  return null;
-                                },
-                                decoration: const InputDecoration(
-                                  hintText: "Enter subject details",
-                                  border: OutlineInputBorder(),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(color: Color(0xFFBDBDBD)),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Color(0xFF2563EB),
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                  errorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(color: Colors.red),
-                                  ),
-                                  focusedErrorBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Colors.red,
-                                      width: 1.5,
-                                    ),
+                "Attachments",
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth >= 700;
+                    return Column(
+                      children: [
+                        if (isWide)
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _attachmentTile(
+                                  label: "Take Photo",
+                                  icon: Icons.camera_alt_outlined,
+                                  onTap: () => _pickAttachment(
+                                    ImageSource.camera,
                                   ),
                                 ),
-                              )
-                            : LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final isWide = constraints.maxWidth >= 700;
-                                  return Column(
-                                    children: [
-                                      if (isWide)
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: _attachmentTile(
-                                                label: "Take Photo",
-                                                icon: Icons.camera_alt_outlined,
-                                                onTap: () => _pickAttachment(
-                                                  ImageSource.camera,
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 16),
-                                            Expanded(
-                                              child: _attachmentTile(
-                                                label: "Gallery",
-                                                icon: Icons.image_outlined,
-                                                onTap: () => _pickAttachment(
-                                                  ImageSource.gallery,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        )
-                                      else ...[
-                                        _attachmentTile(
-                                          label: "Take Photo",
-                                          icon: Icons.camera_alt_outlined,
-                                          onTap: () => _pickAttachment(
-                                            ImageSource.camera,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        _attachmentTile(
-                                          label: "Gallery",
-                                          icon: Icons.image_outlined,
-                                          onTap: () => _pickAttachment(
-                                            ImageSource.gallery,
-                                          ),
-                                        ),
-                                      ],
-                                      if (_attachments.isNotEmpty) ...[
-                                        const SizedBox(height: 16),
-                                        Align(
-                                          alignment: Alignment.centerLeft,
-                                          child: Text(
-                                            "Selected Attachments (${_attachments.length})",
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        ..._attachments.map(
-                                          (file) => Container(
-                                            margin: const EdgeInsets.only(
-                                              bottom: 10,
-                                            ),
-                                            padding: const EdgeInsets.all(8),
-                                            decoration: BoxDecoration(
-                                              border: Border.all(
-                                                color: const Color(0xFFE5E7EB),
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                            ),
-                                            child: Row(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Expanded(
-                                                  child: InkWell(
-                                                    onTap: () =>
-                                                        _viewAttachment(file),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            8),
-                                                    child: Row(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      children: [
-                                                        _attachmentPreview(
-                                                            file),
-                                                        const SizedBox(
-                                                            width: 10),
-                                                        Expanded(
-                                                          child: Padding(
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .only(
-                                                              top: 4,
-                                                            ),
-                                                            child: Text(
-                                                              _fileName(
-                                                                file.path,
-                                                              ),
-                                                              maxLines: 2,
-                                                              overflow:
-                                                                  TextOverflow
-                                                                      .ellipsis,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-                                                IconButton(
-                                                  icon:
-                                                      const Icon(Icons.close),
-                                                  onPressed: () {
-                                                    setState(() {
-                                                      _attachments
-                                                          .remove(file);
-                                                    });
-                                                  },
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  );
-                                },
                               ),
-                      ),
-                    ],
-                  ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _attachmentTile(
+                                  label: "Gallery",
+                                  icon: Icons.image_outlined,
+                                  onTap: () => _pickAttachment(
+                                    ImageSource.gallery,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        else ...[
+                          _attachmentTile(
+                            label: "Take Photo",
+                            icon: Icons.camera_alt_outlined,
+                            onTap: () => _pickAttachment(
+                              ImageSource.camera,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _attachmentTile(
+                            label: "Gallery",
+                            icon: Icons.image_outlined,
+                            onTap: () => _pickAttachment(
+                              ImageSource.gallery,
+                            ),
+                          ),
+                        ],
+                        if (_attachments.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              "Selected Attachments (${_attachments.length})",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ..._attachments.map(
+                            (file) => Container(
+                              margin: const EdgeInsets.only(
+                                bottom: 10,
+                              ),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: const Color(0xFFE5E7EB),
+                                ),
+                                borderRadius:
+                                    BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: () =>
+                                          _viewAttachment(file),
+                                      borderRadius:
+                                          BorderRadius.circular(
+                                              8),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment
+                                                .start,
+                                        children: [
+                                          _attachmentPreview(
+                                              file),
+                                          const SizedBox(
+                                              width: 10),
+                                          Expanded(
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets
+                                                      .only(
+                                                top: 4,
+                                              ),
+                                              child: Text(
+                                                _fileName(
+                                                  file.path,
+                                                ),
+                                                maxLines: 2,
+                                                overflow:
+                                                    TextOverflow
+                                                        .ellipsis,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon:
+                                        const Icon(Icons.close),
+                                    onPressed: () {
+                                      setState(() {
+                                        _attachments
+                                            .remove(file);
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
                 ),
               ),
 
@@ -2096,6 +2083,9 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     required DateTime? date,
     required TextEditingController controller,
     required ValueChanged<DateTime> onPicked,
+    DateTime? firstDate,
+    DateTime? lastDate,
+    String? errorText,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -2103,15 +2093,33 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
         decoration: InputDecoration(
           labelText: label,
           border: const OutlineInputBorder(),
+          enabledBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Color(0xFFBDBDBD)),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Color(0xFF2563EB), width: 1.5),
+          ),
+          errorBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.red),
+          ),
+          focusedErrorBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.red, width: 1.5),
+          ),
+          errorText: errorText,
           suffixIcon: IconButton(
             onPressed: () async {
               if (!_hasRecentUserTap()) return;
               FocusManager.instance.primaryFocus?.unfocus();
+              final lowerBound = firstDate ?? DateTime(2000);
+              final upperBound = lastDate ?? DateTime(2100);
+              DateTime initial = date ?? DateTime.now();
+              if (initial.isBefore(lowerBound)) initial = lowerBound;
+              if (initial.isAfter(upperBound)) initial = upperBound;
               final picked = await showDatePicker(
                 context: context,
-                firstDate: DateTime(2000),
-                lastDate: DateTime(2100),
-                initialDate: date ?? DateTime.now(),
+                firstDate: lowerBound,
+                lastDate: upperBound,
+                initialDate: initial,
               );
               if (!mounted || picked == null) return;
               onPicked(picked);
@@ -2204,19 +2212,36 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     FocusManager.instance.primaryFocus?.unfocus();
   }
 
+  String? _validateSubmissionRules() {
+    if (chargeable.trim().isEmpty || chargeable.trim() == 'Select') {
+      return "Please select Chargeable";
+    }
+
+    if (_isTourClaimYes) {
+      if (tourStartDate == null) {
+        return "Please select Tour Start Date";
+      }
+      if (tourEndDate == null) {
+        return "Please select Tour End Date";
+      }
+      if (tourEndDate!.isBefore(tourStartDate!)) {
+        return "Tour End Date cannot be before Tour Start Date";
+      }
+      if (expenseCtrl.text.trim().isEmpty) {
+        return "Please enter Tour Expense Amount";
+      }
+      if (tourLocationCtrl.text.trim().isEmpty) {
+        return "Please enter Tour Location";
+      }
+    }
+    return null;
+  }
+
   Future<void> _confirmAndSubmit() async {
     if (_isSubmitting) return;
     _safeUnfocus();
     await Future<void>.delayed(Duration.zero);
     if (!mounted) return;
-
-    if (_detailsTabIndex != 0) {
-      setState(() {
-        _detailsTabIndex = 0;
-      });
-      await Future<void>.delayed(Duration.zero);
-      if (!mounted) return;
-    }
 
     if (!_showValidationErrors) {
       setState(() {
@@ -2226,6 +2251,11 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
 
     final formState = _formKey.currentState;
     if (formState == null || !formState.validate()) return;
+    final validationError = _validateSubmissionRules();
+    if (validationError != null) {
+      _showSnackBar(validationError);
+      return;
+    }
 
     final shouldSubmit = await showDialog<bool>(
       context: context,
@@ -2270,14 +2300,6 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     _safeUnfocus();
     await Future<void>.delayed(Duration.zero);
     if (!mounted) return;
-
-    if (_detailsTabIndex != 0) {
-      setState(() {
-        _detailsTabIndex = 0;
-      });
-      await Future<void>.delayed(Duration.zero);
-      if (!mounted) return;
-    }
     if (!_showValidationErrors) {
       setState(() {
         _showValidationErrors = true;
@@ -2285,6 +2307,11 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     }
     final formState = _formKey.currentState;
     if (formState == null || !formState.validate()) return;
+    final validationError = _validateSubmissionRules();
+    if (validationError != null) {
+      _showSnackBar(validationError);
+      return;
+    }
     print('SERVICE CALL SUBMIT CLICKED');
 
     setState(() {
@@ -2299,6 +2326,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
       email: _valueOrEmpty(email, <String>[_selectEmail]),
       contractNo: _valueOrEmpty(contractNo, <String>[_selectContractNo]),
       itemCode: _valueOrEmpty(itemCode, <String>[_selectItemCode]),
+      itemName: _valueOrEmpty(itemName, <String>[_selectItemName]),
       serialNumber: _valueOrEmpty(serialNumber, <String>[_selectSerialNumber]),
       mfrSerialno: _valueOrEmpty(mfrSerialNumber, <String>[_selectMfrSerialNo]),
       currentStatus: ticketStatus.trim(),
@@ -2307,6 +2335,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
         _selectAttendBy,
       ]),
       serviceType: _valueOrEmpty(serviceType, <String>['Select Service Type']),
+      department: _valueOrEmpty(department, <String>['Select Department']),
       serviceNo: serviceNoCtrl.text.trim(),
       createdDate: _formatDateTimeForApi(createdDate),
       closedDate: closedDate == null ? null : _formatDateTimeForApi(closedDate!),

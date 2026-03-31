@@ -250,27 +250,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  width: 30,
-                  height: 30,
+                  width: 34,
+                  height: 34,
                   child: Image.asset(
                     "assets/images/tak.jpeg",
                     fit: BoxFit.contain,
                   ),
                 ),
-                const SizedBox(width: 10),
-                const Text(
-                  "Design Document",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Welcome to TAK Application",
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        "Manage your documents, workflows, and system operations efficiently.",
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black87,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            const Text(
-              "Contains architecture diagrams, UI wireframes, and system design.",
-              style: TextStyle(fontSize: 14),
-            ),
+            // const SizedBox(height: 8),
+            // const Text(
+            //   "Contains architecture diagrams, UI wireframes, and system design.",
+            //   style: TextStyle(fontSize: 14),
+            // ),
           ],
         ),
       ),

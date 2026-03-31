@@ -725,7 +725,15 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
                                   final option = filtered[index];
                                   return ListTile(
                                     dense: true,
-                                    title: Text(option.displayLabel),
+                                    title: Text(option.soNo),
+                                    subtitle: Text(
+                                      [
+                                        if (option.customer.isNotEmpty)
+                                          option.customer,
+                                        if (option.soDate.isNotEmpty)
+                                          'Date: ${option.soDate}',
+                                      ].join(' • '),
+                                    ),
                                     onTap: () =>
                                         Navigator.pop(sheetContext, option),
                                   );
@@ -831,7 +839,15 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
                                   final option = filtered[index];
                                   return ListTile(
                                     dense: true,
-                                    title: Text(option.displayLabel),
+                                    title: Text(option.serviceCallNo),
+                                    subtitle: Text(
+                                      [
+                                        if (option.businessPartner.isNotEmpty)
+                                          option.businessPartner,
+                                        if (option.serviceCallDate.isNotEmpty)
+                                          'Date: ${option.serviceCallDate}',
+                                      ].join(' • '),
+                                    ),
                                     onTap: () =>
                                         Navigator.pop(sheetContext, option),
                                   );
@@ -1332,11 +1348,22 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     final text = value.trim();
     if (text.isEmpty) return '';
 
+    final epochMatch = RegExp(r'^/Date\((\d+)\)/$').firstMatch(text);
+    if (epochMatch != null) {
+      final epochMillis = int.tryParse(epochMatch.group(1)!);
+      if (epochMillis != null) {
+        final parsed = DateTime.fromMillisecondsSinceEpoch(epochMillis);
+        final day = parsed.day.toString().padLeft(2, '0');
+        final month = parsed.month.toString().padLeft(2, '0');
+        return '$day/$month/${parsed.year}';
+      }
+    }
+
     final parsed = DateTime.tryParse(text);
     if (parsed != null) {
       final day = parsed.day.toString().padLeft(2, '0');
       final month = parsed.month.toString().padLeft(2, '0');
-      return '$day-$month-${parsed.year}';
+      return '$day/$month/${parsed.year}';
     }
 
     final slashMatch = RegExp(
@@ -1346,7 +1373,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       final day = slashMatch.group(1)!.padLeft(2, '0');
       final month = slashMatch.group(2)!.padLeft(2, '0');
       final year = slashMatch.group(3)!;
-      return '$day-$month-$year';
+      return '$day/$month/$year';
     }
 
     final dashMatch = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})$').firstMatch(text);
@@ -1354,7 +1381,27 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       final year = dashMatch.group(1)!;
       final month = dashMatch.group(2)!.padLeft(2, '0');
       final day = dashMatch.group(3)!.padLeft(2, '0');
-      return '$day-$month-$year';
+      return '$day/$month/$year';
+    }
+
+    final ddMmYyyyDashMatch = RegExp(
+      r'^(\d{1,2})-(\d{1,2})-(\d{4})$',
+    ).firstMatch(text);
+    if (ddMmYyyyDashMatch != null) {
+      final day = ddMmYyyyDashMatch.group(1)!.padLeft(2, '0');
+      final month = ddMmYyyyDashMatch.group(2)!.padLeft(2, '0');
+      final year = ddMmYyyyDashMatch.group(3)!;
+      return '$day/$month/$year';
+    }
+
+    final yyyyMmDdSlashMatch = RegExp(
+      r'^(\d{4})/(\d{1,2})/(\d{1,2})$',
+    ).firstMatch(text);
+    if (yyyyMmDdSlashMatch != null) {
+      final year = yyyyMmDdSlashMatch.group(1)!;
+      final month = yyyyMmDdSlashMatch.group(2)!.padLeft(2, '0');
+      final day = yyyyMmDdSlashMatch.group(3)!.padLeft(2, '0');
+      return '$day/$month/$year';
     }
 
     return text;

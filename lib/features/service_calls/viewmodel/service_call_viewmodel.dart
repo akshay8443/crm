@@ -1,7 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
@@ -465,12 +462,16 @@ class ServiceCallViewModel {
       'email': request.email,
       'contractNo': request.contractNo,
       'itemCode': request.itemCode,
+      'itemName': request.itemName,
+      'ItemName': request.itemName,
       'serialNumber': request.serialNumber,
       'mfrSerialno': request.mfrSerialno,
       'currentStatus': request.currentStatus,
       'priority': request.priority,
       'assignedTech': request.assignedTech,
       'serviceType': request.serviceType,
+      'department': request.department,
+      'Department': request.department,
       'serviceNo': request.serviceNo.trim(),
       'createdDate': request.createdDate,
       'closedDate': request.closedDate,
@@ -549,73 +550,121 @@ class ServiceCallViewModel {
     }
 
     final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.uploadImagePath}');
-    final request = http.MultipartRequest('POST', uri)
-      ..headers['Authorization'] = ApiConstants.basicAuthorization
-      ..fields['ServiceNo'] = normalizedServiceNo
-      ..fields['CustomerCode'] = normalizedCustomerCode;
-
+    final preparedFiles = <Map<String, dynamic>>[];
     for (final file in files) {
       final resolvedName = file.name.trim().isNotEmpty
           ? file.name.trim()
           : _fallbackFileName(file.path);
-      if (!kIsWeb && file.path.trim().isNotEmpty) {
-        final localFile = File(file.path);
-        if (!await localFile.exists()) {
-          throw Exception('Attachment not found: $resolvedName');
-        }
-        final sizeInBytes = await localFile.length();
-        if (sizeInBytes <= 0) {
-          throw Exception('Attachment is empty: $resolvedName');
-        }
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'file',
-            file.path,
-            filename: resolvedName,
-          ),
-        );
-        continue;
-      }
-
       final bytes = await file.readAsBytes();
       if (bytes.isEmpty) {
         throw Exception('Attachment is empty: $resolvedName');
       }
-      request.files.add(
-        http.MultipartFile.fromBytes('file', bytes, filename: resolvedName),
-      );
+      preparedFiles.add(<String, dynamic>{
+        'name': resolvedName,
+        'bytes': bytes,
+      });
     }
 
     print('UPLOAD IMAGE URL: $uri');
-    print('UPLOAD IMAGE FIELDS: ${request.fields}');
-    print('UPLOAD IMAGE FILE COUNT: ${request.files.length}');
+    print('UPLOAD IMAGE SERVICE NO: $normalizedServiceNo');
+    print('UPLOAD IMAGE CUSTOMER CODE: $normalizedCustomerCode');
+    print('UPLOAD IMAGE FILE COUNT: ${preparedFiles.length}');
 
-    final streamedResponse =
-        await request.send().timeout(const Duration(seconds: 180));
-    final responseBody = await streamedResponse.stream.bytesToString();
+    Future<http.StreamedResponse> sendWithFieldName(
+      String fieldName,
+      Map<String, String> fieldProfile,
+    ) async {
+      final request = http.MultipartRequest('POST', uri)
+        ..headers['Authorization'] = ApiConstants.basicAuthorization
+        ..headers['Accept'] = 'application/json'
+        ..fields.addAll(fieldProfile);
+      for (final item in preparedFiles) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            fieldName,
+            item['bytes'] as List<int>,
+            filename: item['name'] as String,
+          ),
+        );
+      }
+      return request.send().timeout(const Duration(seconds: 180));
+    }
 
-    print('UPLOAD IMAGE STATUS: ${streamedResponse.statusCode}');
-    print('UPLOAD IMAGE RESPONSE: $responseBody');
+    final fieldNames = <String>['file', 'files', 'File', 'Image'];
+    final fieldProfiles = <Map<String, String>>[
+      <String, String>{
+        'ServiceNo': normalizedServiceNo,
+        'CustomerCode': normalizedCustomerCode,
+      },
+      <String, String>{
+        'serviceNo': normalizedServiceNo,
+        'customerCode': normalizedCustomerCode,
+      },
+      <String, String>{
+        'ServiceCallNo': normalizedServiceNo,
+        'CustomerCode': normalizedCustomerCode,
+      },
+      <String, String>{
+        'serviceCallNo': normalizedServiceNo,
+        'customerCode': normalizedCustomerCode,
+      },
+    ];
+    int? lastStatusCode;
+    String lastResponseBody = '';
+    Object? lastError;
 
-    Map<String, dynamic> responseData = <String, dynamic>{};
-    if (responseBody.isNotEmpty) {
-      final dynamic decoded = jsonDecode(responseBody);
-      if (decoded is Map<String, dynamic>) {
-        responseData = decoded;
-      } else {
-        responseData = <String, dynamic>{'data': decoded};
+    for (final fieldProfile in fieldProfiles) {
+      for (final fieldName in fieldNames) {
+        try {
+          final streamedResponse = await sendWithFieldName(
+            fieldName,
+            fieldProfile,
+          );
+          final responseBody = await streamedResponse.stream.bytesToString();
+
+          print('UPLOAD IMAGE FIELD NAME: $fieldName');
+          print('UPLOAD IMAGE FORM FIELDS: $fieldProfile');
+          print('UPLOAD IMAGE STATUS: ${streamedResponse.statusCode}');
+          print('UPLOAD IMAGE RESPONSE: $responseBody');
+
+          lastStatusCode = streamedResponse.statusCode;
+          lastResponseBody = responseBody;
+
+          Map<String, dynamic> responseData = <String, dynamic>{};
+          if (responseBody.isNotEmpty) {
+            try {
+              final dynamic decoded = jsonDecode(responseBody);
+              if (decoded is Map<String, dynamic>) {
+                responseData = decoded;
+              } else {
+                responseData = <String, dynamic>{'data': decoded};
+              }
+            } catch (_) {
+              responseData = <String, dynamic>{'message': responseBody};
+            }
+          }
+
+          if (streamedResponse.statusCode >= 200 &&
+              streamedResponse.statusCode < 300) {
+            return responseData;
+          }
+        } catch (e) {
+          print(
+            'UPLOAD IMAGE TRY ERROR (field=$fieldName, fields=$fieldProfile): $e',
+          );
+          lastError = e;
+        }
       }
     }
 
-    if (streamedResponse.statusCode >= 200 && streamedResponse.statusCode < 300) {
-      return responseData;
+    if (lastResponseBody.trim().isNotEmpty) {
+      throw Exception(lastResponseBody.trim());
     }
-
-    final message = (responseData['message'] ?? responseBody).toString().trim();
+    if (lastError != null) {
+      throw Exception(lastError.toString());
+    }
     throw Exception(
-      message.isNotEmpty
-          ? message
-          : 'Attachment upload failed (${streamedResponse.statusCode})',
+      'Attachment upload failed (${lastStatusCode ?? 'unknown'})',
     );
   }
 
