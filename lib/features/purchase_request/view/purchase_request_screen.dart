@@ -197,7 +197,14 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
         if (row is! Map<String, dynamic>) {
           continue;
         }
-        final employeeNo = _readValue(row, <String>['EmployeeNo', 'EmpNo']);
+        final employeeCode = _readValue(row, <String>[
+          'EmployeeCode',
+          'EmpCode',
+          'Code',
+          'EmployeeId',
+          'EmployeeNo',
+          'EmpNo',
+        ]);
         final firstName = _readValue(row, <String>['FirstName', 'firstName']);
         final middleName = _readValue(row, <String>[
           'MiddleName',
@@ -210,8 +217,8 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           middleName,
           lastName,
         ].where((part) => part.isNotEmpty).join(' ');
-        final label = employeeNo.isNotEmpty
-            ? '$employeeNo - $fullName'
+        final label = employeeCode.isNotEmpty
+            ? '$employeeCode - $fullName'
             : fullName;
         if (label.trim().isNotEmpty) {
           options.add(label.trim());
@@ -1345,7 +1352,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
   }
 
   String _formatDisplayDate(String value) {
-    final text = value.trim();
+    final text = _stripTimeFromDateText(value.trim());
     if (text.isEmpty) return '';
 
     final epochMatch = RegExp(r'^/Date\((\d+)\)/$').firstMatch(text);
@@ -1405,6 +1412,27 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     }
 
     return text;
+  }
+
+  String _stripTimeFromDateText(String value) {
+    if (value.isEmpty) return value;
+
+    final leadingDate = RegExp(
+      r'^(\d{1,2}/\d{1,2}/\d{4}|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}-\d{1,2}-\d{4}|\d{4}/\d{1,2}/\d{1,2})',
+    ).firstMatch(value);
+    if (leadingDate != null) {
+      return leadingDate.group(1)!;
+    }
+
+    final tIndex = value.indexOf('T');
+    if (tIndex > 0) {
+      final beforeT = value.substring(0, tIndex).trim();
+      if (RegExp(r'^\d{4}-\d{1,2}-\d{1,2}$').hasMatch(beforeT)) {
+        return beforeT;
+      }
+    }
+
+    return value;
   }
 
   Future<void> _openUploadOptions() async {
