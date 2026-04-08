@@ -30,7 +30,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
   final _reqToController = TextEditingController();
 
   final _docNoController = TextEditingController(text: 'PR-000028');
-  final _docDateController = TextEditingController(text: '2026-03-22');
+  final _docDateController = TextEditingController();
   final _requiredDateController = TextEditingController();
   final _validUntilController = TextEditingController();
   final _amendmentDateController = TextEditingController();
@@ -61,6 +61,9 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _docDateController.text =
+        '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
     final initialDocNo = widget.initialDocNo?.trim() ?? '';
     if (initialDocNo.isNotEmpty) {
       _docNoController.text = initialDocNo;
@@ -1186,16 +1189,16 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       'RequisitionToDepartment': _requisitionToDepartment ?? '',
       'Department': _responsibleDepartment ?? _requisitionToDepartment ?? '',
       'ReqTo': _reqToController.text.trim(),
-      'RequirementType': _requirementType ?? '',
+      'RequirementType': (_requirementType ?? '').toUpperCase(),
       'ReplacementExplanation': _explanationController.text.trim().isEmpty
           ? 'NA'
           : _explanationController.text.trim(),
       'ServiceCallNo': _extractLeadingCode(_serviceCallController.text.trim()),
       'SalesOrderNo': _extractLeadingCode(_salesOrderController.text.trim()),
       'ResponsibleDept': _responsibleDepartment ?? '',
-      'Priority': _priority ?? '',
+      'Priority': (_priority ?? '').toUpperCase(),
       'NatureOfProcurement': _natureOfProcurement ?? '',
-      'PrivateClient': _privateClient ?? '',
+      'PrivateClient': (_privateClient ?? '').toUpperCase(),
       'ShipTo': _shipToController.text.trim(),
       'Remarks': _remarksController.text.trim(),
       'ImportantNote': _importantNoteController.text.trim(),
@@ -1631,8 +1634,9 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           _dropdownField(
             label: 'Requirement Type',
             value: _requirementType,
-            items: const ['New Requirement', 'Replacement'],
-            onChanged: (value) => setState(() => _requirementType = value),
+            items: const ['NEW REQUIREMENT', 'REPLACEMENT'],
+            onChanged: (value) =>
+                setState(() => _requirementType = value?.toUpperCase()),
             hint: 'Search Requirement Type',
           ),
           const SizedBox(height: 10),
@@ -1713,8 +1717,8 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           _dropdownField(
             label: 'Priority',
             value: _priority,
-            items: const ['High', 'Low', 'Medium', 'Urgent'],
-            onChanged: (value) => setState(() => _priority = value),
+            items: const ['HIGH', 'LOW', 'MEDIUM', 'URGENT'],
+            onChanged: (value) => setState(() => _priority = value?.toUpperCase()),
             hint: 'Search Priority',
           ),
           const SizedBox(height: 10),
@@ -1736,8 +1740,9 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           _dropdownField(
             label: 'Private Client',
             value: _privateClient,
-            items: const ['Yes', 'No'],
-            onChanged: (value) => setState(() => _privateClient = value),
+            items: const ['YES', 'NO'],
+            onChanged: (value) =>
+                setState(() => _privateClient = value?.toUpperCase()),
             hint: 'Search Option',
           ),
           const SizedBox(height: 10),
