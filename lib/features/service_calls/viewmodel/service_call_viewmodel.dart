@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/api_constants.dart';
+import '../../../core/session/user_session.dart';
 import '../model/contract_data.dart';
 import '../model/employee_data.dart';
 import '../model/problem_sub_type_data.dart';
@@ -460,6 +461,7 @@ class ServiceCallViewModel {
       'customerName': request.customerName,
       'phone': request.phone,
       'email': request.email,
+      'APKUSERID': UserSession.loggedInEmail,
       'contractNo': request.contractNo,
       'itemCode': request.itemCode,
       'itemName': request.itemName,

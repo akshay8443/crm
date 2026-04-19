@@ -1,8 +1,14 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+
+import '../../../core/constants/api_constants.dart';
+import '../../../core/session/user_session.dart';
 
 class ApDownPaymentRequestScreen extends StatefulWidget {
   const ApDownPaymentRequestScreen({super.key});
@@ -29,40 +35,43 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
   final _remarksController = TextEditingController();
   final _importantNoteController = TextEditingController();
 
-  final _apDownPaymentNoController = TextEditingController(text: 'APDPM-000001');
+  final _apDownPaymentNoController = TextEditingController();
   final _postingDateController = TextEditingController();
   final _dueDateController = TextEditingController();
 
   String? _responsibleDepartment;
   String? _priority;
   String? _paymentType;
-
-  final List<String> _employeeOptions = const [
-    'EMP001 - Rahul Verma',
-    'EMP002 - Neha Sharma',
-    'EMP003 - Amit Singh',
-  ];
-
-  final List<String> _departmentOptions = const [
-    'Sales',
-    'Purchase',
-    'Operations',
-    'Service',
-    'Finance',
-  ];
+  List<String> _vendorRefOptions = const [];
+  List<String> _buyerOptions = const [];
+  List<String> _ownerOptions = const [];
+  List<String> _departmentOptions = const [];
+  List<String> _salesOrderOptions = const [];
+  List<String> _serviceCallOptions = const [];
+  List<String> _itemCodeOptions = const [];
+  List<String> _itemDescriptionOptions = const [];
+  List<String> _taxCodeOptions = const [];
+  List<String> _warehouseOptions = const [];
+  List<String> _projectOptions = const [];
+  Map<String, String> _itemDescriptionByCode = const {};
+  Map<String, String> _itemCodeByDescription = const {};
+  bool _isSubmitting = false;
 
   final List<String> _priorityOptions = const [
-    'High',
-    'Medium',
-    'Low',
-    'Urgent',
+    'HIGH',
+    'MEDIUM',
+    'LOW',
+    'URGENT',
   ];
 
   final List<String> _paymentTypeOptions = const [
-    'Advance Payment',
-    'Against Sales Order',
-    'Against Service Call',
-    'Project Based',
+    'Select',
+    'Clearance',
+    'Advance',
+    'Vendor Payment',
+    'OthersExcepTour',
+    'EmpAdvNoTour',
+    'EmpClrNoTour',
   ];
 
   @override
@@ -71,6 +80,17 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
     final now = DateTime.now();
     _postingDateController.text = _formatDate(now);
     _dueDateController.text = _formatDate(now);
+    _fetchApDownPaymentVendors();
+    _fetchApDownPaymentBuyers();
+    _fetchApDownPaymentOwners();
+    _fetchApDownPaymentDepartments();
+    _fetchApDownPaymentSalesOrders();
+    _fetchApDownPaymentServiceCalls();
+    _fetchApDownPaymentItems();
+    _fetchNextApDownPaymentNumber();
+    _fetchApDownPaymentTaxCodes();
+    _fetchApDownPaymentWarehouses();
+    _fetchApDownPaymentProjects();
   }
 
   @override
@@ -131,7 +151,7 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
           Padding(
             padding: const EdgeInsets.only(right: 8, top: 10, bottom: 10),
             child: FilledButton(
-              onPressed: _onSubmit,
+              onPressed: _isSubmitting ? null : _onSubmit,
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF1E69F2),
                 foregroundColor: Colors.white,
@@ -139,7 +159,13 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const Text('Submit'),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Submit'),
             ),
           ),
         ],
@@ -176,33 +202,38 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
       title: 'Main Details',
       child: Column(
         children: [
-          _labelField('Vendor Ref No', _vendorRefNoController),
+          _selectionField(
+            label: 'Vendor Ref No',
+            controller: _vendorRefNoController,
+            options: _vendorRefOptions,
+            searchHint: 'Search vendor',
+          ),
           const SizedBox(height: 10),
           _selectionField(
             label: 'Buyer',
             controller: _buyerController,
-            options: _employeeOptions,
+            options: _buyerOptions,
             searchHint: 'Search buyer',
           ),
           const SizedBox(height: 10),
           _selectionField(
             label: 'Owner',
             controller: _ownerController,
-            options: _employeeOptions,
+            options: _ownerOptions,
             searchHint: 'Search owner',
           ),
           const SizedBox(height: 10),
           _selectionField(
             label: 'Service Call',
             controller: _serviceCallController,
-            options: const ['SC-100021', 'SC-100022', 'SC-100023'],
+            options: _serviceCallOptions,
             searchHint: 'Search service call',
           ),
           const SizedBox(height: 10),
           _selectionField(
             label: 'Sales Order',
             controller: _salesOrderController,
-            options: const ['SO-30541', 'SO-30542', 'SO-30543'],
+            options: _salesOrderOptions,
             searchHint: 'Search sales order',
           ),
           const SizedBox(height: 10),
@@ -362,12 +393,40 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
           SizedBox(width: 30, child: Text('$rowNo')),
           SizedBox(
             width: 160,
-            child: TextField(controller: item.itemCodeController, decoration: inputDecoration),
+            child: _tableSelectionField(
+              controller: item.itemCodeController,
+              options: _itemCodeOptions,
+              hintText: 'Item code',
+              searchHint: 'Search item code',
+              onSelected: (selected) {
+                setState(() {
+                  item.itemCodeController.text = selected;
+                  final description = _itemDescriptionByCode[selected];
+                  if (description != null && description.trim().isNotEmpty) {
+                    item.descriptionController.text = description;
+                  }
+                });
+              },
+            ),
           ),
           const SizedBox(width: 6),
           SizedBox(
             width: 190,
-            child: TextField(controller: item.descriptionController, decoration: inputDecoration),
+            child: _tableSelectionField(
+              controller: item.descriptionController,
+              options: _itemDescriptionOptions,
+              hintText: 'Description',
+              searchHint: 'Search description',
+              onSelected: (selected) {
+                setState(() {
+                  item.descriptionController.text = selected;
+                  final code = _itemCodeByDescription[selected];
+                  if (code != null && code.trim().isNotEmpty) {
+                    item.itemCodeController.text = code;
+                  }
+                });
+              },
+            ),
           ),
           const SizedBox(width: 6),
           SizedBox(
@@ -387,17 +446,47 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
           const SizedBox(width: 6),
           SizedBox(
             width: 120,
-            child: TextField(controller: item.taxCodeController, decoration: inputDecoration),
+            child: _tableSelectionField(
+              controller: item.taxCodeController,
+              options: _taxCodeOptions,
+              hintText: 'Tax code',
+              searchHint: 'Search tax code',
+              onSelected: (selected) {
+                setState(() {
+                  item.taxCodeController.text = selected;
+                });
+              },
+            ),
           ),
           const SizedBox(width: 6),
           SizedBox(
             width: 170,
-            child: TextField(controller: item.warehouseController, decoration: inputDecoration),
+            child: _tableSelectionField(
+              controller: item.warehouseController,
+              options: _warehouseOptions,
+              hintText: 'Warehouse',
+              searchHint: 'Search warehouse',
+              onSelected: (selected) {
+                setState(() {
+                  item.warehouseController.text = selected;
+                });
+              },
+            ),
           ),
           const SizedBox(width: 6),
           SizedBox(
             width: 160,
-            child: TextField(controller: item.projectController, decoration: inputDecoration),
+            child: _tableSelectionField(
+              controller: item.projectController,
+              options: _projectOptions,
+              hintText: 'Project',
+              searchHint: 'Search project',
+              onSelected: (selected) {
+                setState(() {
+                  item.projectController.text = selected;
+                });
+              },
+            ),
           ),
           SizedBox(
             width: 80,
@@ -512,6 +601,900 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
         ),
       ),
     );
+  }
+
+  Uri _buildNoCacheUri(String path) {
+    final uri = Uri.parse('${ApiConstants.baseUrl}$path');
+    final params = Map<String, String>.from(uri.queryParameters);
+    params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
+    return uri.replace(queryParameters: params);
+  }
+
+  Map<String, String> _getHeaders() {
+    return <String, String>{
+      'Accept': 'application/json',
+      'Authorization': ApiConstants.basicAuthorization,
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+    };
+  }
+
+  Future<void> _fetchApDownPaymentVendors() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getApDownBpMasterPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Get AP down payment BP master failed');
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from AP down payment BP master API');
+      }
+
+      final decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid AP down payment BP master response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid AP down payment BP master response format');
+      }
+
+      final options = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) continue;
+
+        final bpCode = _readValue(row, <String>['BPCode', 'CardCode', 'Code']);
+        final bpName = _readValue(row, <String>[
+          'BPName',
+          'CardName',
+          'Name',
+        ]);
+
+        String label = '';
+        if (bpCode.isNotEmpty && bpName.isNotEmpty) {
+          label = '$bpCode - $bpName';
+        } else if (bpCode.isNotEmpty) {
+          label = bpCode;
+        } else if (bpName.isNotEmpty) {
+          label = bpName;
+        }
+
+        if (label.trim().isNotEmpty) {
+          options.add(label.trim());
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _vendorRefOptions = options.toList()..sort();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load vendor reference list')),
+      );
+    }
+  }
+
+  Future<void> _fetchApDownPaymentBuyers() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getApDownBuyerMasterPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Get AP down payment buyer master failed');
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from AP down payment buyer master API');
+      }
+
+      final decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception(
+            'Invalid AP down payment buyer master response format',
+          );
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid AP down payment buyer master response format');
+      }
+
+      final options = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) continue;
+
+        final name = _readValue(row, <String>[
+          'SalesEmployeeName',
+          'BuyerName',
+          'EmployeeName',
+          'Name',
+        ]);
+        final code = _readValue(row, <String>[
+          'SalesEmployeeCode',
+          'SalesEmployeeID',
+          'EmployeeCode',
+          'Code',
+        ]);
+
+        String label = '';
+        if (code.isNotEmpty && name.isNotEmpty) {
+          label = '$code - $name';
+        } else if (name.isNotEmpty) {
+          label = name;
+        } else if (code.isNotEmpty) {
+          label = code;
+        }
+
+        if (label.trim().isNotEmpty) {
+          options.add(label.trim());
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _buyerOptions = options.toList()..sort();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load buyer list')),
+      );
+    }
+  }
+
+  Future<void> _fetchApDownPaymentOwners() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getApDownOwnerMasterPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Get AP down payment owner master failed');
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from AP down payment owner master API');
+      }
+
+      final decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception(
+            'Invalid AP down payment owner master response format',
+          );
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid AP down payment owner master response format');
+      }
+
+      final options = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) continue;
+
+        final code = _readValue(row, <String>[
+          'EmployeeCode',
+          'OwnerCode',
+          'SalesEmployeeCode',
+          'Code',
+        ]);
+        final firstName = _readValue(row, <String>['FirstName', 'FName']);
+        final middleName = _readValue(row, <String>['MiddleName', 'MName']);
+        final lastName = _readValue(row, <String>['LastName', 'LName']);
+        final fullName = <String>[firstName, middleName, lastName]
+            .where((part) => part.trim().isNotEmpty)
+            .join(' ')
+            .trim();
+        final fallbackName = _readValue(row, <String>[
+          'OwnerName',
+          'EmployeeName',
+          'SalesEmployeeName',
+          'Name',
+        ]);
+        final name = fullName.isNotEmpty ? fullName : fallbackName;
+
+        String label = '';
+        if (code.isNotEmpty && name.isNotEmpty) {
+          label = '$code - $name';
+        } else if (name.isNotEmpty) {
+          label = name;
+        } else if (code.isNotEmpty) {
+          label = code;
+        }
+
+        if (label.trim().isNotEmpty) {
+          options.add(label.trim());
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _ownerOptions = options.toList()..sort();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load owner list')),
+      );
+    }
+  }
+
+  Future<void> _fetchApDownPaymentDepartments() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getApDownDepartmentMasterPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Get AP down payment department master failed');
+      }
+      if (response.body.isEmpty) {
+        throw Exception(
+          'Empty response from AP down payment department master API',
+        );
+      }
+
+      final decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception(
+            'Invalid AP down payment department master response format',
+          );
+        }
+        rows = nested;
+      } else {
+        throw Exception(
+          'Invalid AP down payment department master response format',
+        );
+      }
+
+      final options = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) continue;
+
+        final deptName = _readValue(row, <String>[
+          'DeptName',
+          'Department',
+          'DepartmentName',
+          'Name',
+        ]);
+        final deptCode = _readValue(row, <String>[
+          'DeptCode',
+          'DepartmentCode',
+          'Code',
+        ]);
+
+        String label = '';
+        if (deptName.isNotEmpty) {
+          label = deptName;
+        } else if (deptCode.isNotEmpty) {
+          label = deptCode;
+        }
+
+        if (label.trim().isNotEmpty) {
+          options.add(label.trim());
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _departmentOptions = options.toList()..sort();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load department list')),
+      );
+    }
+  }
+
+  Future<void> _fetchApDownPaymentSalesOrders() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getApDownSalesOrderMasterPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Get AP down payment sales order master failed');
+      }
+      if (response.body.isEmpty) {
+        throw Exception(
+          'Empty response from AP down payment sales order master API',
+        );
+      }
+
+      final decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception(
+            'Invalid AP down payment sales order master response format',
+          );
+        }
+        rows = nested;
+      } else {
+        throw Exception(
+          'Invalid AP down payment sales order master response format',
+        );
+      }
+
+      final options = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) continue;
+
+        final soNo = _readValue(row, <String>[
+          'SoNo',
+          'SalesOrderNo',
+          'SONo',
+          'DocNum',
+          'OrderNo',
+          'SalesOrderNumber',
+          'SalesOrder',
+          'DocEntry',
+          'Code',
+        ]);
+        final soDate = _formatSalesOrderDateForDisplay(
+          _readValue(row, <String>[
+            'SODate',
+            'SoDate',
+            'SalesOrderDate',
+            'OrderDate',
+            'DocDate',
+            'Date',
+          ]),
+        );
+        final customerName = _readValue(row, <String>[
+          'Customer',
+          'CustomerName',
+          'CardName',
+          'BPName',
+          'Name',
+        ]);
+
+        String label = '';
+        if (soNo.isNotEmpty && soDate.isNotEmpty && customerName.isNotEmpty) {
+          label = '$soNo - $soDate - $customerName';
+        } else if (soNo.isNotEmpty && soDate.isNotEmpty) {
+          label = '$soNo - $soDate';
+        } else if (soNo.isNotEmpty && customerName.isNotEmpty) {
+          label = '$soNo - $customerName';
+        } else if (soNo.isNotEmpty) {
+          label = soNo;
+        } else if (soDate.isNotEmpty && customerName.isNotEmpty) {
+          label = '$soDate - $customerName';
+        } else if (soDate.isNotEmpty) {
+          label = soDate;
+        } else if (customerName.isNotEmpty) {
+          label = customerName;
+        }
+
+        if (label.trim().isNotEmpty) {
+          options.add(label.trim());
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _salesOrderOptions = options.toList()..sort();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load sales order list')),
+      );
+    }
+  }
+
+  Future<void> _fetchApDownPaymentServiceCalls() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getApDownServiceCallMasterPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Get AP down payment service call master failed');
+      }
+      if (response.body.isEmpty) {
+        throw Exception(
+          'Empty response from AP down payment service call master API',
+        );
+      }
+
+      final decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception(
+            'Invalid AP down payment service call master response format',
+          );
+        }
+        rows = nested;
+      } else {
+        throw Exception(
+          'Invalid AP down payment service call master response format',
+        );
+      }
+
+      final options = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) continue;
+
+        final callId = _readValue(row, <String>[
+          'CallID',
+          'ServiceCallNo',
+          'CallNo',
+          'ServiceCall',
+          'DocNum',
+          'Code',
+          'DocEntry',
+        ]);
+        final bpName = _readValue(row, <String>[
+          'BPName',
+          'Customer',
+          'CustomerName',
+          'CardName',
+          'Name',
+          'Subject',
+          'Title',
+          'Description',
+        ]);
+        final callDate = _formatSalesOrderDateForDisplay(
+          _readValue(row, <String>[
+            'CallDate',
+            'ServiceCallDate',
+            'DocDate',
+            'Date',
+          ]),
+        );
+        final subject = _readValue(row, <String>[
+          'Subject',
+          'Title',
+          'Description',
+          'CustomerName',
+          'CardName',
+          'Name',
+        ]);
+
+        String label = '';
+        if (callId.isNotEmpty && bpName.isNotEmpty && callDate.isNotEmpty) {
+          label = '$callId - $bpName - $callDate';
+        } else if (callId.isNotEmpty && bpName.isNotEmpty) {
+          label = '$callId - $bpName';
+        } else if (callId.isNotEmpty && callDate.isNotEmpty) {
+          label = '$callId - $callDate';
+        } else if (callId.isNotEmpty && subject.isNotEmpty) {
+          label = '$callId - $subject';
+        } else if (callId.isNotEmpty) {
+          label = callId;
+        } else if (bpName.isNotEmpty && callDate.isNotEmpty) {
+          label = '$bpName - $callDate';
+        } else if (bpName.isNotEmpty) {
+          label = bpName;
+        } else if (callDate.isNotEmpty) {
+          label = callDate;
+        } else if (subject.isNotEmpty) {
+          label = subject;
+        }
+
+        if (label.trim().isNotEmpty) {
+          options.add(label.trim());
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _serviceCallOptions = options.toList()..sort();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load service call list')),
+      );
+    }
+  }
+
+  Future<void> _fetchApDownPaymentItems() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getApDownItemMasterPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Get AP down payment item master failed');
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from AP down payment item master API');
+      }
+
+      final decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid AP down payment item master response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid AP down payment item master response format');
+      }
+
+      final codeOptions = <String>{};
+      final descriptionOptions = <String>{};
+      final descriptionByCode = <String, String>{};
+      final codeByDescription = <String, String>{};
+
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) continue;
+
+        final code = _readValue(row, <String>[
+          'ItemCode',
+          'Code',
+          'ItemNo',
+        ]);
+        final description = _readValue(row, <String>[
+          'ItemDescription',
+          'ItemName',
+          'Dscription',
+          'Description',
+          'Name',
+        ]);
+
+        if (code.trim().isNotEmpty) {
+          codeOptions.add(code.trim());
+        }
+        if (description.trim().isNotEmpty) {
+          descriptionOptions.add(description.trim());
+        }
+        if (code.trim().isNotEmpty && description.trim().isNotEmpty) {
+          descriptionByCode[code.trim()] = description.trim();
+          codeByDescription[description.trim()] = code.trim();
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _itemCodeOptions = codeOptions.toList()..sort();
+        _itemDescriptionOptions = descriptionOptions.toList()..sort();
+        _itemDescriptionByCode = Map<String, String>.unmodifiable(
+          descriptionByCode,
+        );
+        _itemCodeByDescription = Map<String, String>.unmodifiable(
+          codeByDescription,
+        );
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load item master list')),
+      );
+    }
+  }
+
+  Future<void> _fetchNextApDownPaymentNumber() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getNextApDownPaymentNumberPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Get next AP down payment number failed');
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from next AP down payment number API');
+      }
+
+      final decoded = jsonDecode(response.body);
+      String number = '';
+
+      if (decoded is String) {
+        number = decoded.trim();
+      } else if (decoded is num) {
+        number = decoded.toString().trim();
+      } else if (decoded is List && decoded.isNotEmpty) {
+        final first = decoded.first;
+        if (first is Map<String, dynamic>) {
+          number = _readValue(first, <String>[
+            'APdownPaymentNo',
+            'APDownPaymentNo',
+            'APdownPaymentNumber',
+            'APDownPaymentNumber',
+            'DocNum',
+            'Number',
+            'NextNumber',
+            'Code',
+          ]);
+        } else if (first != null) {
+          number = first.toString().trim();
+        }
+      } else if (decoded is Map<String, dynamic>) {
+        number = _readValue(decoded, <String>[
+          'APdownPaymentNo',
+          'APDownPaymentNo',
+          'APdownPaymentNumber',
+          'APDownPaymentNumber',
+          'DocNum',
+          'Number',
+          'NextNumber',
+          'data',
+          'result',
+          'value',
+        ]);
+      }
+
+      if (!mounted || number.isEmpty) return;
+      setState(() {
+        _apDownPaymentNoController.text = number;
+      });
+    } catch (_) {
+      // Keep screen usable even if number API fails.
+    }
+  }
+
+  Future<void> _fetchApDownPaymentTaxCodes() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getApDownTaxCodeMasterPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Get AP down payment tax code master failed');
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from AP down payment tax code API');
+      }
+
+      final decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid AP down payment tax code response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid AP down payment tax code response format');
+      }
+
+      final options = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) continue;
+
+        final code = _readValue(row, <String>[
+          'TaxCode',
+          'VatGroup',
+          'Code',
+        ]);
+        final name = _readValue(row, <String>[
+          'TaxName',
+          'Name',
+          'Description',
+        ]);
+
+        String label = '';
+        if (code.isNotEmpty && name.isNotEmpty) {
+          label = '$code - $name';
+        } else if (code.isNotEmpty) {
+          label = code;
+        } else if (name.isNotEmpty) {
+          label = name;
+        }
+
+        if (label.trim().isNotEmpty) {
+          options.add(label.trim());
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _taxCodeOptions = options.toList()..sort();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load tax code list')),
+      );
+    }
+  }
+
+  Future<void> _fetchApDownPaymentWarehouses() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getApDownWarehouseMasterPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Get AP down payment warehouse master failed');
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from AP down payment warehouse API');
+      }
+
+      final decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid AP down payment warehouse response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid AP down payment warehouse response format');
+      }
+
+      final options = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) continue;
+
+        final code = _readValue(row, <String>[
+          'WhsCode',
+          'WarehouseCode',
+          'Code',
+        ]);
+        final name = _readValue(row, <String>[
+          'WhsName',
+          'WarehouseName',
+          'Name',
+          'Description',
+        ]);
+
+        String label = '';
+        if (code.isNotEmpty && name.isNotEmpty) {
+          label = '$code - $name';
+        } else if (code.isNotEmpty) {
+          label = code;
+        } else if (name.isNotEmpty) {
+          label = name;
+        }
+
+        if (label.trim().isNotEmpty) {
+          options.add(label.trim());
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _warehouseOptions = options.toList()..sort();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load warehouse list')),
+      );
+    }
+  }
+
+  Future<void> _fetchApDownPaymentProjects() async {
+    try {
+      final uri = _buildNoCacheUri(ApiConstants.getApDownProjectMasterPath);
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Get AP down payment project master failed');
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from AP down payment project API');
+      }
+
+      final decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid AP down payment project response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid AP down payment project response format');
+      }
+
+      final options = <String>{};
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) continue;
+
+        final code = _readValue(row, <String>['ProjectCode', 'Code']);
+        final name = _readValue(row, <String>[
+          'ProjectName',
+          'Name',
+          'Description',
+        ]);
+
+        String label = '';
+        if (code.isNotEmpty && name.isNotEmpty) {
+          label = '$code - $name';
+        } else if (code.isNotEmpty) {
+          label = code;
+        } else if (name.isNotEmpty) {
+          label = name;
+        }
+
+        if (label.trim().isNotEmpty) {
+          options.add(label.trim());
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _projectOptions = options.toList()..sort();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load project list')),
+      );
+    }
+  }
+
+  String _readValue(Map<String, dynamic> row, List<String> keys) {
+    for (final key in keys) {
+      if (!row.containsKey(key)) continue;
+      final value = row[key];
+      if (value == null) continue;
+      final text = value.toString().trim();
+      if (text.isNotEmpty) {
+        return text;
+      }
+    }
+    return '';
+  }
+
+  String _formatSalesOrderDateForDisplay(String rawDate) {
+    final value = rawDate.trim();
+    if (value.isEmpty) return '';
+
+    var cleaned = value;
+    if (cleaned.contains('T')) {
+      cleaned = cleaned.split('T').first;
+    }
+    if (cleaned.contains(' ')) {
+      cleaned = cleaned.split(' ').first;
+    }
+    return cleaned.trim();
   }
 
   Future<void> _openUploadOptions() async {
@@ -811,6 +1794,48 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
     );
   }
 
+  Widget _tableSelectionField({
+    required TextEditingController controller,
+    required List<String> options,
+    required String hintText,
+    required String searchHint,
+    required ValueChanged<String> onSelected,
+  }) {
+    return InkWell(
+      onTap: () async {
+        final selected = await _openTextPicker(
+          options: options,
+          searchHint: searchHint,
+          emptyText: 'No data found',
+        );
+        if (selected == null) return;
+        onSelected(selected);
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: (controller.text).trim().isEmpty ? hintText : null,
+          filled: true,
+          fillColor: const Color(0xFFFBFBFC),
+          suffixIcon: const Icon(Icons.arrow_drop_down),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 10,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+          ),
+        ),
+        child: Text(controller.text),
+      ),
+    );
+  }
+
   Widget _dropdownField({
     required String label,
     required String? value,
@@ -957,10 +1982,106 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
     });
   }
 
-  void _onSubmit() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('AP Down Payment Request ready for submit')),
-    );
+  Future<void> _onSubmit() async {
+    final linePayload = _items
+        .where(
+          (item) =>
+              item.itemCodeController.text.trim().isNotEmpty ||
+              item.descriptionController.text.trim().isNotEmpty ||
+              item.qtyController.text.trim().isNotEmpty ||
+              item.unitPriceController.text.trim().isNotEmpty ||
+              item.discountController.text.trim().isNotEmpty ||
+              item.taxCodeController.text.trim().isNotEmpty ||
+              item.warehouseController.text.trim().isNotEmpty ||
+              item.projectController.text.trim().isNotEmpty,
+        )
+        .map((item) {
+          return <String, dynamic>{
+            'ItemCode': _extractCode(item.itemCodeController.text),
+            'ItemDescription': item.descriptionController.text.trim(),
+            'Qty': _tryParseNum(item.qtyController.text) ?? 0,
+            'UnitPrice': _tryParseNum(item.unitPriceController.text) ?? 0,
+            'Discount': _tryParseNum(item.discountController.text) ?? 0,
+            'TaxCode': _extractCode(item.taxCodeController.text),
+            'Warehouse': _extractCode(item.warehouseController.text),
+            'ProjectCode': _extractCode(item.projectController.text),
+          };
+        })
+        .toList();
+
+    if (linePayload.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add at least one item line')),
+      );
+      return;
+    }
+
+    final payload = <String, dynamic>{
+      'DocNo': _apDownPaymentNoController.text.trim(),
+      'VendorRefNo': _extractCode(_vendorRefNoController.text),
+      'Buyer': _buyerController.text.trim(),
+      'ResponsibleDept': (_responsibleDepartment ?? '').trim(),
+      'Owner': _extractCode(_ownerController.text),
+      'Priority': (_priority ?? '').trim(),
+      'PaymentType': (_paymentType ?? '').trim(),
+      'ServiceCall': _extractCode(_serviceCallController.text),
+      'SalesOrder': _extractCode(_salesOrderController.text),
+      'PostingDate': _toApiDate(_postingDateController.text),
+      'DueDate': _toApiDate(_dueDateController.text),
+      'DPMPercent': _tryParseNum(_dpmPercentController.text) ?? 0,
+      'TourStartDate': _toApiDate(_tourStartDateController.text),
+      'TourEndDate': _toApiDate(_tourEndDateController.text),
+      'Remarks': _remarksController.text.trim(),
+      'ImportantNote': _importantNoteController.text.trim(),
+      'APKUSERID': UserSession.loggedInEmail,
+      'Lines': linePayload,
+    };
+
+    try {
+      setState(() {
+        _isSubmitting = true;
+      });
+
+      final uri = _buildNoCacheUri(ApiConstants.createApDownPaymentPath);
+      final response = await http
+          .post(
+            uri,
+            headers: <String, String>{
+              ..._getHeaders(),
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      if (!mounted) return;
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Submit failed (${response.statusCode}). Please check data and try again.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('AP Down Payment submitted successfully')),
+      );
+      _fetchNextApDownPaymentNumber();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to submit AP Down Payment')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
   }
 
   String _formatDate(DateTime date) {
@@ -978,6 +2099,30 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
     final year = int.tryParse(match.group(3)!);
     if (day == null || month == null || year == null) return null;
     return DateTime(year, month, day);
+  }
+
+  String _toApiDate(String value) {
+    final parsed = _parseDate(value);
+    if (parsed == null) {
+      return value.trim();
+    }
+    final month = parsed.month.toString().padLeft(2, '0');
+    final day = parsed.day.toString().padLeft(2, '0');
+    return '${parsed.year}-$month-$day';
+  }
+
+  num? _tryParseNum(String value) {
+    final cleaned = value.trim().replaceAll(',', '');
+    if (cleaned.isEmpty) return null;
+    return num.tryParse(cleaned);
+  }
+
+  String _extractCode(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+    final idx = trimmed.indexOf(' - ');
+    if (idx <= 0) return trimmed;
+    return trimmed.substring(0, idx).trim();
   }
 }
 

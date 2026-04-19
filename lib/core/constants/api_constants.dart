@@ -23,6 +23,23 @@ class ApiConstants {
   static const String getNextServiceNoPath = '/api/GetNextServiceNo';
   static const String getAllServiceCallPath = '/api/GetAllserviceCall';
   static const String getAllPurchaseRequestPath = '/api/GetAllPurchaseRequest';
+  static const String getApDownBpMasterPath = '/api/GetAPdownBPMaster';
+  static const String getApDownBuyerMasterPath = '/api/GetAPdownBuyerMaster';
+  static const String getApDownOwnerMasterPath = '/api/APdownOwnerMaster';
+  static const String getApDownDepartmentMasterPath =
+      '/api/GetAPdownDepartmentMaster';
+  static const String getApDownSalesOrderMasterPath =
+      '/api/APdownSalesOrderMasteMaster';
+  static const String getApDownServiceCallMasterPath =
+      '/api/APdownServiceCallMaster';
+  static const String getApDownItemMasterPath = '/GetAPdownItemMaster';
+  static const String getNextApDownPaymentNumberPath =
+      '/api/GetNextAPDownPaymentNumber';
+  static const String getApDownTaxCodeMasterPath = '/api/APdownTaxCodeMaster';
+  static const String getApDownWarehouseMasterPath =
+      '/api/APdownWarehouseMater';
+  static const String getApDownProjectMasterPath = '/api/APdownProjectMaster';
+  static const String createApDownPaymentPath = '/api/CreateAPDownPayment';
   static const String getSpecficServiceCallPath = '/api/GetSpecficserviceCall';
   static const String updateServiceCallStatusPath =
       '/api/updateservicecallstatus';

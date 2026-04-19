@@ -161,8 +161,10 @@
 import 'dart:async';
 
 import 'package:crm_app/features/ap_down_payment/view/ap_down_payment_request_screen.dart';
+import 'package:crm_app/features/inventory_transfer/view/inventory_transfer_request_screen.dart';
 import 'package:crm_app/features/purchase_request/view/purchase_request_options_screen.dart';
 import 'package:flutter/material.dart';
+import '../../../core/session/user_session.dart';
 import '../../service_calls/view/service_call_screen.dart';
 import '../../service_calls/viewmodel/service_call_viewmodel.dart';
 
@@ -216,6 +218,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: ElevatedButton(
               onPressed: () {
                 // ✅ PROPER LOGOUT
+                UserSession.clear();
                 Navigator.of(
                   context,
                   rootNavigator: true,
@@ -341,7 +344,18 @@ class _SideMenu extends StatelessWidget {
               );
             },
           ),
-          _menuItem(context, title: "Inventory Transfer Request", onTap: () {}),
+          _menuItem(
+            context,
+            title: "Inventory Transfer Request",
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const InventoryTransferRequestScreen(),
+                ),
+              );
+            },
+          ),
           _menuItem(
             context,
             title: "Service Call",

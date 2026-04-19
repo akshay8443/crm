@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/api_constants.dart';
+import '../../../core/session/user_session.dart';
 import 'purchase_request_static_data.dart';
 
 class PurchaseRequestScreen extends StatefulWidget {
@@ -1184,6 +1185,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       'ValidUntil': _toApiDate(_validUntilController.text.trim()),
       'AmendmentDate': _toApiDate(_amendmentDateController.text.trim()),
       'Requester': _requesterNameController.text.trim(),
+      'APKUSERID': UserSession.loggedInEmail,
       'Owner': _ownerNameController.text.trim(),
       'ReqToDept': _requisitionToDepartment ?? '',
       'RequisitionToDepartment': _requisitionToDepartment ?? '',

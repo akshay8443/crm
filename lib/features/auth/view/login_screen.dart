@@ -1,6 +1,7 @@
 // features/auth/view/login_screen.dart
 import 'package:flutter/material.dart';
 
+import '../../../core/session/user_session.dart';
 import '../model/login_request.dart';
 import '../viewmodel/login_viewmodel.dart';
 
@@ -35,6 +36,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (!mounted) return;
+      UserSession.setLoggedInEmail(emailController.text.trim());
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(result.message)));
