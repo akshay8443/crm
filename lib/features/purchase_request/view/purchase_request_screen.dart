@@ -21,6 +21,10 @@ class PurchaseRequestScreen extends StatefulWidget {
 }
 
 class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
+  static const int _attachmentImageQuality = 70;
+  static const double _attachmentMaxWidth = 1920;
+  static const double _attachmentMaxHeight = 1920;
+
   final ImagePicker _imagePicker = ImagePicker();
   final List<_PurchaseItem> items = [_PurchaseItem()];
   final List<XFile> _attachments = [];
@@ -1314,6 +1318,11 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
 
     for (final file in _attachments) {
       final fileBytes = await file.readAsBytes();
+      final fileName = _resolvedAttachmentFileName(file);
+      if (fileBytes.isEmpty) {
+        throw Exception('Attachment is empty: $fileName');
+      }
+
       final request = http.MultipartRequest('POST', uri)
         ..headers.addAll(<String, String>{
           'Authorization': ApiConstants.basicAuthorization,
@@ -1321,7 +1330,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
         })
         ..fields['DocNo'] = docNo
         ..files.add(
-          http.MultipartFile.fromBytes('file', fileBytes, filename: file.name),
+          http.MultipartFile.fromBytes('file', fileBytes, filename: fileName),
         );
 
       final streamedResponse = await request.send().timeout(
@@ -1329,9 +1338,26 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       );
       final response = await http.Response.fromStream(streamedResponse);
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('Attachment upload failed (${response.statusCode})');
+        final message = response.body.trim();
+        throw Exception(
+          message.isNotEmpty
+              ? message
+              : 'Attachment upload failed (${response.statusCode})',
+        );
       }
     }
+  }
+
+  String _resolvedAttachmentFileName(XFile file) {
+    final directName = file.name.trim();
+    final path = file.path.trim();
+    final pathName = path.isEmpty ? '' : path.split('/').last.trim();
+    final candidate = directName.isNotEmpty ? directName : pathName;
+    if (candidate.isEmpty) {
+      return 'attachment.jpg';
+    }
+    final hasExtension = RegExp(r'\.[A-Za-z0-9]{2,5}$').hasMatch(candidate);
+    return hasExtension ? candidate : '$candidate.jpg';
   }
 
   String _extractLeadingCode(String input) {
@@ -1490,7 +1516,12 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
         return;
       }
 
-      final photo = await _imagePicker.pickImage(source: ImageSource.camera);
+      final photo = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: _attachmentImageQuality,
+        maxWidth: _attachmentMaxWidth,
+        maxHeight: _attachmentMaxHeight,
+      );
       if (!mounted || photo == null) {
         return;
       }
@@ -1537,7 +1568,11 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
 
   Future<void> _pickFromGallery() async {
     try {
-      final files = await _imagePicker.pickMultiImage();
+      final files = await _imagePicker.pickMultiImage(
+        imageQuality: _attachmentImageQuality,
+        maxWidth: _attachmentMaxWidth,
+        maxHeight: _attachmentMaxHeight,
+      );
       if (!mounted || files.isEmpty) {
         return;
       }
@@ -1720,7 +1755,8 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
             label: 'Priority',
             value: _priority,
             items: const ['HIGH', 'LOW', 'MEDIUM', 'URGENT'],
-            onChanged: (value) => setState(() => _priority = value?.toUpperCase()),
+            onChanged: (value) =>
+                setState(() => _priority = value?.toUpperCase()),
             hint: 'Search Priority',
           ),
           const SizedBox(height: 10),

@@ -18,7 +18,8 @@ class ApDownPaymentRequestScreen extends StatefulWidget {
       _ApDownPaymentRequestScreenState();
 }
 
-class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen> {
+class _ApDownPaymentRequestScreenState
+    extends State<ApDownPaymentRequestScreen> {
   final ImagePicker _imagePicker = ImagePicker();
   final List<_DownPaymentItem> _items = [_DownPaymentItem()];
   final List<XFile> _attachments = [];
@@ -254,7 +255,8 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
             label: 'Responsible Department',
             value: _responsibleDepartment,
             items: _departmentOptions,
-            onChanged: (value) => setState(() => _responsibleDepartment = value),
+            onChanged: (value) =>
+                setState(() => _responsibleDepartment = value),
             hint: 'Select department',
           ),
           const SizedBox(height: 10),
@@ -333,16 +335,46 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
                     ),
                     child: Row(
                       children: [
-                        SizedBox(width: 30, child: Text('#', style: headerStyle)),
-                        SizedBox(width: 160, child: Text('Item Code', style: headerStyle)),
-                        SizedBox(width: 190, child: Text('Description', style: headerStyle)),
-                        SizedBox(width: 120, child: Text('Qty', style: headerStyle)),
-                        SizedBox(width: 140, child: Text('Unit Price', style: headerStyle)),
-                        SizedBox(width: 130, child: Text('Discount %', style: headerStyle)),
-                        SizedBox(width: 120, child: Text('Tax Code', style: headerStyle)),
-                        SizedBox(width: 170, child: Text('Warehouse', style: headerStyle)),
-                        SizedBox(width: 160, child: Text('Project', style: headerStyle)),
-                        SizedBox(width: 80, child: Text('Act', style: headerStyle)),
+                        SizedBox(
+                          width: 30,
+                          child: Text('#', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 160,
+                          child: Text('Item Code', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 190,
+                          child: Text('Description', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 120,
+                          child: Text('Qty', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 140,
+                          child: Text('Unit Price', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 130,
+                          child: Text('Discount %', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 120,
+                          child: Text('Tax Code', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 170,
+                          child: Text('Warehouse', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 160,
+                          child: Text('Project', style: headerStyle),
+                        ),
+                        SizedBox(
+                          width: 80,
+                          child: Text('Act', style: headerStyle),
+                        ),
                       ],
                     ),
                   ),
@@ -431,17 +463,26 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
           const SizedBox(width: 6),
           SizedBox(
             width: 120,
-            child: TextField(controller: item.qtyController, decoration: inputDecoration),
+            child: TextField(
+              controller: item.qtyController,
+              decoration: inputDecoration,
+            ),
           ),
           const SizedBox(width: 6),
           SizedBox(
             width: 140,
-            child: TextField(controller: item.unitPriceController, decoration: inputDecoration),
+            child: TextField(
+              controller: item.unitPriceController,
+              decoration: inputDecoration,
+            ),
           ),
           const SizedBox(width: 6),
           SizedBox(
             width: 130,
-            child: TextField(controller: item.discountController, decoration: inputDecoration),
+            child: TextField(
+              controller: item.discountController,
+              decoration: inputDecoration,
+            ),
           ),
           const SizedBox(width: 6),
           SizedBox(
@@ -652,11 +693,7 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
         if (row is! Map<String, dynamic>) continue;
 
         final bpCode = _readValue(row, <String>['BPCode', 'CardCode', 'Code']);
-        final bpName = _readValue(row, <String>[
-          'BPName',
-          'CardName',
-          'Name',
-        ]);
+        final bpName = _readValue(row, <String>['BPName', 'CardName', 'Name']);
 
         String label = '';
         if (bpCode.isNotEmpty && bpName.isNotEmpty) {
@@ -800,10 +837,11 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
         final firstName = _readValue(row, <String>['FirstName', 'FName']);
         final middleName = _readValue(row, <String>['MiddleName', 'MName']);
         final lastName = _readValue(row, <String>['LastName', 'LName']);
-        final fullName = <String>[firstName, middleName, lastName]
-            .where((part) => part.trim().isNotEmpty)
-            .join(' ')
-            .trim();
+        final fullName = <String>[
+          firstName,
+          middleName,
+          lastName,
+        ].where((part) => part.trim().isNotEmpty).join(' ').trim();
         final fallbackName = _readValue(row, <String>[
           'OwnerName',
           'EmployeeName',
@@ -1146,7 +1184,9 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
       } else if (decoded is Map<String, dynamic>) {
         final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
         if (nested is! List) {
-          throw Exception('Invalid AP down payment item master response format');
+          throw Exception(
+            'Invalid AP down payment item master response format',
+          );
         }
         rows = nested;
       } else {
@@ -1161,11 +1201,7 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
       for (final row in rows) {
         if (row is! Map<String, dynamic>) continue;
 
-        final code = _readValue(row, <String>[
-          'ItemCode',
-          'Code',
-          'ItemNo',
-        ]);
+        final code = _readValue(row, <String>['ItemCode', 'Code', 'ItemNo']);
         final description = _readValue(row, <String>[
           'ItemDescription',
           'ItemName',
@@ -1298,11 +1334,7 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
       for (final row in rows) {
         if (row is! Map<String, dynamic>) continue;
 
-        final code = _readValue(row, <String>[
-          'TaxCode',
-          'VatGroup',
-          'Code',
-        ]);
+        final code = _readValue(row, <String>['TaxCode', 'VatGroup', 'Code']);
         final name = _readValue(row, <String>[
           'TaxName',
           'Name',
@@ -1770,7 +1802,10 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
         filled: true,
         fillColor: const Color(0xFFFBFBFC),
         suffixIcon: const Icon(Icons.arrow_drop_down),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(6),
           borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
@@ -1938,7 +1973,9 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
                             ? Center(
                                 child: Text(
                                   emptyText,
-                                  style: const TextStyle(color: Color(0xFF6A7685)),
+                                  style: const TextStyle(
+                                    color: Color(0xFF6A7685),
+                                  ),
                                 ),
                               )
                             : ListView.separated(
@@ -1950,7 +1987,8 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
                                   return ListTile(
                                     dense: true,
                                     title: Text(option),
-                                    onTap: () => Navigator.pop(sheetContext, option),
+                                    onTap: () =>
+                                        Navigator.pop(sheetContext, option),
                                   );
                                 },
                               ),
@@ -1982,7 +2020,79 @@ class _ApDownPaymentRequestScreenState extends State<ApDownPaymentRequestScreen>
     });
   }
 
+  String? _validateRequiredFields() {
+    final requiredFields = <MapEntry<String, String>>[
+      MapEntry('Vendor Ref No', _vendorRefNoController.text),
+      MapEntry('Buyer', _buyerController.text),
+      MapEntry('Owner', _ownerController.text),
+      MapEntry('Service Call', _serviceCallController.text),
+      MapEntry('Sales Order', _salesOrderController.text),
+      MapEntry('Responsible Department', _responsibleDepartment ?? ''),
+      MapEntry('Priority', _priority ?? ''),
+      MapEntry('Payment Type', _paymentType ?? ''),
+      MapEntry('AP Down Payment No', _apDownPaymentNoController.text),
+      MapEntry('Posting Date', _postingDateController.text),
+      MapEntry('Due Date', _dueDateController.text),
+    ];
+
+    for (final field in requiredFields) {
+      final value = field.value.trim();
+      if (value.isEmpty || value.toLowerCase() == 'select') {
+        return '${field.key} is required';
+      }
+    }
+
+    final populatedItems = _items
+        .where(
+          (item) =>
+              item.itemCodeController.text.trim().isNotEmpty ||
+              item.descriptionController.text.trim().isNotEmpty ||
+              item.qtyController.text.trim().isNotEmpty ||
+              item.unitPriceController.text.trim().isNotEmpty ||
+              item.discountController.text.trim().isNotEmpty ||
+              item.taxCodeController.text.trim().isNotEmpty ||
+              item.warehouseController.text.trim().isNotEmpty ||
+              item.projectController.text.trim().isNotEmpty,
+        )
+        .toList();
+
+    if (populatedItems.isEmpty) {
+      return 'Please add at least one item line';
+    }
+
+    for (var index = 0; index < populatedItems.length; index++) {
+      final item = populatedItems[index];
+      final lineNo = index + 1;
+      final lineFields = <MapEntry<String, String>>[
+        MapEntry('Item Code', item.itemCodeController.text),
+        MapEntry('Description', item.descriptionController.text),
+        MapEntry('Qty', item.qtyController.text),
+        MapEntry('Unit Price', item.unitPriceController.text),
+        MapEntry('Discount %', item.discountController.text),
+        MapEntry('Tax Code', item.taxCodeController.text),
+        MapEntry('Warehouse', item.warehouseController.text),
+        MapEntry('Project', item.projectController.text),
+      ];
+
+      for (final field in lineFields) {
+        if (field.value.trim().isEmpty) {
+          return 'Row $lineNo: ${field.key} is required';
+        }
+      }
+    }
+
+    return null;
+  }
+
   Future<void> _onSubmit() async {
+    final validationMessage = _validateRequiredFields();
+    if (validationMessage != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(validationMessage)));
+      return;
+    }
+
     final linePayload = _items
         .where(
           (item) =>

@@ -39,6 +39,23 @@ class ApiConstants {
   static const String getApDownWarehouseMasterPath =
       '/api/APdownWarehouseMater';
   static const String getApDownProjectMasterPath = '/api/APdownProjectMaster';
+  static const String getInventoryBpMasterPath = '/api/GetInventoryBPMaster';
+  static const String getInventoryWarehousePath =
+      '/api/GETnventoryFromWarehouse';
+  static const String getInventorySalesOrderNoPath =
+      '/api/GETInventorySalesOrderNo';
+  static const String getInventoryServiceCallNoPath =
+      '/api/GETInventoryServiceCallNo';
+  static const String getInventoryEmployeeCodePath =
+      '/api/GetnventoryEmployeeCode';
+  static const String getInventoryOpportunityNoPath =
+      '/api/GETInventoryOpportunityNo';
+  static const String getInventoryConnectedTransferNoPath =
+      '/api/GetInventoryConnectedInventoryTransferNo';
+  static const String getInventoryItemMasterPath =
+      '/api/GETInventoryItemMaster';
+  static const String getInventoryProjectMasterPath =
+      '/api/GETInventoryProjectMaster';
   static const String createApDownPaymentPath = '/api/CreateAPDownPayment';
   static const String getSpecficServiceCallPath = '/api/GetSpecficserviceCall';
   static const String updateServiceCallStatusPath =

@@ -335,9 +335,8 @@ class _SideMenu extends StatelessWidget {
           _menuItem(
             context,
             title: "Purchase Request",
-            onTap: () {
-              Navigator.push(
-                context,
+            onTap: (navigator) {
+              navigator.push(
                 MaterialPageRoute(
                   builder: (_) => const PurchaseRequestOptionsScreen(),
                 ),
@@ -347,9 +346,8 @@ class _SideMenu extends StatelessWidget {
           _menuItem(
             context,
             title: "Inventory Transfer Request",
-            onTap: () {
-              Navigator.push(
-                context,
+            onTap: (navigator) {
+              navigator.push(
                 MaterialPageRoute(
                   builder: (_) => const InventoryTransferRequestScreen(),
                 ),
@@ -359,7 +357,7 @@ class _SideMenu extends StatelessWidget {
           _menuItem(
             context,
             title: "Service Call",
-            onTap: () {
+            onTap: (navigator) {
               print('DASHBOARD: Service Call menu tapped');
               final serviceCallViewModel = ServiceCallViewModel();
               unawaited(
@@ -379,19 +377,17 @@ class _SideMenu extends StatelessWidget {
                       print('DASHBOARD: Service APIs warmup error: $error');
                     }),
               );
-              Navigator.push(
-                context,
+              navigator.push(
                 MaterialPageRoute(builder: (_) => const ServiceCallScreen()),
               );
             },
           ),
-          _menuItem(context, title: "Goods Issue Request", onTap: () {}),
+          _menuItem(context, title: "Goods Issue Request", onTap: (_) {}),
           _menuItem(
             context,
             title: "AP Down Payment Request",
-            onTap: () {
-              Navigator.push(
-                context,
+            onTap: (navigator) {
+              navigator.push(
                 MaterialPageRoute(
                   builder: (_) => const ApDownPaymentRequestScreen(),
                 ),
@@ -406,14 +402,15 @@ class _SideMenu extends StatelessWidget {
   Widget _menuItem(
     BuildContext context, {
     required String title,
-    required VoidCallback onTap,
+    required ValueChanged<NavigatorState> onTap,
   }) {
     return ListTile(
       leading: const Icon(Icons.chevron_right),
       title: Text(title),
       onTap: () {
-        Navigator.pop(context);
-        onTap();
+        final navigator = Navigator.of(context);
+        navigator.pop();
+        onTap(navigator);
       },
     );
   }
