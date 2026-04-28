@@ -141,6 +141,7 @@ class _PurchaseRequestReportScreenState
           ),
         );
       }
+      mappedRows.sort(_comparePurchaseRequestRowsDescending);
 
       if (!mounted) return;
       setState(() {
@@ -195,6 +196,70 @@ class _PurchaseRequestReportScreenState
     final day = parsed.day.toString().padLeft(2, '0');
     final month = months[parsed.month - 1];
     return '$day-$month-${parsed.year}';
+  }
+
+  int _comparePurchaseRequestRowsDescending(
+    _PurchaseRequestRow a,
+    _PurchaseRequestRow b,
+  ) {
+    final dateCompare = _parseDisplayDate(
+      b.docDate,
+    ).compareTo(_parseDisplayDate(a.docDate));
+    if (dateCompare != 0) {
+      return dateCompare;
+    }
+
+    final docNoCompare = _extractTrailingNumber(
+      b.docNo,
+    ).compareTo(_extractTrailingNumber(a.docNo));
+    if (docNoCompare != 0) {
+      return docNoCompare;
+    }
+
+    return b.docNo.toLowerCase().compareTo(a.docNo.toLowerCase());
+  }
+
+  DateTime _parseDisplayDate(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return DateTime.fromMillisecondsSinceEpoch(0);
+
+    final parsed = DateTime.tryParse(text);
+    if (parsed != null) return parsed;
+
+    final match = RegExp(r'^(\d{2})-([A-Za-z]{3})-(\d{4})$').firstMatch(text);
+    if (match == null) {
+      return DateTime.fromMillisecondsSinceEpoch(0);
+    }
+
+    const months = <String, int>{
+      'jan': 1,
+      'feb': 2,
+      'mar': 3,
+      'apr': 4,
+      'may': 5,
+      'jun': 6,
+      'jul': 7,
+      'aug': 8,
+      'sep': 9,
+      'oct': 10,
+      'nov': 11,
+      'dec': 12,
+    };
+
+    final day = int.tryParse(match.group(1)!);
+    final month = months[match.group(2)!.toLowerCase()];
+    final year = int.tryParse(match.group(3)!);
+
+    if (day == null || month == null || year == null) {
+      return DateTime.fromMillisecondsSinceEpoch(0);
+    }
+
+    return DateTime(year, month, day);
+  }
+
+  int _extractTrailingNumber(String value) {
+    final match = RegExp(r'(\d+)(?!.*\d)').firstMatch(value);
+    return int.tryParse(match?.group(1) ?? '') ?? -1;
   }
 
   void _openPurchaseRequest(_PurchaseRequestRow row) {

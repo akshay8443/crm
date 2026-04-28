@@ -56,6 +56,10 @@ class ApiConstants {
       '/api/GETInventoryItemMaster';
   static const String getInventoryProjectMasterPath =
       '/api/GETInventoryProjectMaster';
+  static const String getNextInventoryTransferNumberPath =
+      '/api/GetNextInventorytransferNumber';
+  static const String createInventoryTransferRequestPath =
+      '/api/CreateInventoryTransferRequest';
   static const String createApDownPaymentPath = '/api/CreateAPDownPayment';
   static const String getSpecficServiceCallPath = '/api/GetSpecficserviceCall';
   static const String updateServiceCallStatusPath =

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../core/constants/api_constants.dart';
+import '../../../core/session/user_session.dart';
 
 class InventoryTransferRequestScreen extends StatefulWidget {
   const InventoryTransferRequestScreen({super.key});
@@ -15,6 +16,7 @@ class InventoryTransferRequestScreen extends StatefulWidget {
 
 class _InventoryTransferRequestScreenState
     extends State<InventoryTransferRequestScreen> {
+  static const String _noneOption = 'None';
   final _formKey = GlobalKey<FormState>();
 
   final TextEditingController _byDepartmentController = TextEditingController();
@@ -51,6 +53,7 @@ class _InventoryTransferRequestScreenState
   String? _employeeCode;
   String? _opportunityNo;
   String? _connectedTransferNo;
+  bool _isSubmitting = false;
 
   List<String> _businessPartnerOptions = const <String>[];
   final List<String> _transferTypeOptions = <String>[
@@ -76,15 +79,23 @@ class _InventoryTransferRequestScreenState
     'Admin',
   ];
   List<_WarehouseOption> _warehouseOptions = const <_WarehouseOption>[];
+  Map<String, String> _warehouseLabelsByCode = const <String, String>{};
   List<_SalesOrderOption> _salesOrderOptions = const <_SalesOrderOption>[];
+  Map<String, String> _salesOrderLabelsByNo = const <String, String>{};
   List<_ServiceCallOption> _serviceCallOptions = const <_ServiceCallOption>[];
+  Map<String, String> _serviceCallLabelsById = const <String, String>{};
   List<_EmployeeOption> _employeeOptions = const <_EmployeeOption>[];
+  Map<String, String> _employeeLabelsByCode = const <String, String>{};
   List<_OpportunityOption> _opportunityOptions =
       const <_OpportunityOption>[];
+  Map<String, String> _opportunityLabelsByNo = const <String, String>{};
   List<_ConnectedTransferOption> _connectedTransferOptions =
       const <_ConnectedTransferOption>[];
+  Map<String, _ItemOption> _itemOptionsByCode = const <String, _ItemOption>{};
+  Map<String, String> _connectedTransferLabelsByNo = const <String, String>{};
   List<_ItemOption> _itemOptions = const <_ItemOption>[];
   List<_ProjectOption> _projectOptions = const <_ProjectOption>[];
+  Map<String, String> _projectLabelsByCode = const <String, String>{};
 
   final List<_InventoryItemRow> _items = <_InventoryItemRow>[_InventoryItemRow()];
 
@@ -95,6 +106,7 @@ class _InventoryTransferRequestScreenState
     _documentDateController.text = _formatDate(now);
     _postingDateController.text = _formatDate(now);
     _status = 'Open';
+    _fetchNextInventoryTransferNumber();
     _fetchBusinessPartners();
     _fetchWarehouses();
     _fetchSalesOrders();
@@ -168,6 +180,140 @@ class _InventoryTransferRequestScreenState
       }
     }
     return '';
+  }
+
+  String _toApiDate(String input) {
+    final value = input.trim();
+    if (value.isEmpty) {
+      return '';
+    }
+
+    final parts = value.split('/');
+    if (parts.length == 3) {
+      final day = parts[0].padLeft(2, '0');
+      final month = parts[1].padLeft(2, '0');
+      final year = parts[2];
+      return '$year-$month-$day';
+    }
+
+    return value;
+  }
+
+  String _extractLeadingCode(String input) {
+    final value = input.trim();
+    if (value.isEmpty) {
+      return '';
+    }
+
+    final separatorIndex = value.indexOf('-');
+    if (separatorIndex <= 0) {
+      return value;
+    }
+
+    return value.substring(0, separatorIndex).trim();
+  }
+
+  List<String> _withNoneStringOption(List<String> options) {
+    final normalized = options
+        .where((option) => option.trim().isNotEmpty)
+        .where((option) => option.trim().toLowerCase() != _noneOption.toLowerCase())
+        .toList(growable: false);
+    return <String>[_noneOption, ...normalized];
+  }
+
+  List<_PickerOption> _withNonePickerOption(List<_PickerOption> options) {
+    return <_PickerOption>[
+      const _PickerOption(value: _noneOption, label: _noneOption),
+      ...options.where(
+        (option) => option.value.trim().toLowerCase() != _noneOption.toLowerCase(),
+      ),
+    ];
+  }
+
+  bool _isNoneOrEmpty(String? value) {
+    final normalized = value?.trim() ?? '';
+    return normalized.isEmpty ||
+        normalized.toLowerCase() == _noneOption.toLowerCase();
+  }
+
+  String? _normalizeSelectedOption(String? value) {
+    return _isNoneOrEmpty(value) ? null : value!.trim();
+  }
+
+  void _putIfNotBlank(Map<String, dynamic> target, String key, String? value) {
+    final normalized = value?.trim() ?? '';
+    if (normalized.isNotEmpty) {
+      target[key] = normalized;
+    }
+  }
+
+  Future<void> _fetchNextInventoryTransferNumber() async {
+    try {
+      final uri = _buildNoCacheUri(
+        ApiConstants.getNextInventoryTransferNumberPath,
+      );
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'Get next inventory transfer number failed (${response.statusCode})',
+        );
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from next inventory transfer API');
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid next inventory transfer response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid next inventory transfer response format');
+      }
+
+      String nextNumber = '';
+      for (final row in rows) {
+        if (row is! Map<String, dynamic>) {
+          continue;
+        }
+
+        nextNumber = _readValue(
+          row,
+          <String>[
+            'InventorytransferReqNo',
+            'InventoryTransferReqNo',
+            'InventoryTransferNumber',
+            'DocNum',
+          ],
+        );
+        if (nextNumber.isNotEmpty) {
+          break;
+        }
+      }
+
+      if (!mounted || nextNumber.isEmpty) {
+        return;
+      }
+
+      _documentNoController.text = nextNumber;
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to load document number'),
+        ),
+      );
+    }
   }
 
   Future<void> _fetchBusinessPartners() async {
@@ -325,6 +471,11 @@ class _InventoryTransferRequestScreenState
         ..sort((a, b) => a.label.compareTo(b.label));
       setState(() {
         _warehouseOptions = sortedOptions;
+        _warehouseLabelsByCode = Map<String, String>.unmodifiable(
+          optionsByCode.map(
+            (key, value) => MapEntry<String, String>(key, value.label),
+          ),
+        );
         if (_fromWarehouse != null &&
             !_warehouseOptions.any((option) => option.code == _fromWarehouse)) {
           _fromWarehouse = null;
@@ -414,6 +565,11 @@ class _InventoryTransferRequestScreenState
         ..sort((a, b) => a.label.compareTo(b.label));
       setState(() {
         _salesOrderOptions = sortedOptions;
+        _salesOrderLabelsByNo = Map<String, String>.unmodifiable(
+          optionsByNo.map(
+            (key, value) => MapEntry<String, String>(key, value.label),
+          ),
+        );
         if (_salesOrderNo != null &&
             !_salesOrderOptions.any((option) => option.soNo == _salesOrderNo)) {
           _salesOrderNo = null;
@@ -495,6 +651,11 @@ class _InventoryTransferRequestScreenState
         ..sort((a, b) => a.label.compareTo(b.label));
       setState(() {
         _serviceCallOptions = sortedOptions;
+        _serviceCallLabelsById = Map<String, String>.unmodifiable(
+          optionsById.map(
+            (key, value) => MapEntry<String, String>(key, value.label),
+          ),
+        );
         if (_serviceCallNo != null &&
             !_serviceCallOptions.any(
               (option) => option.callId == _serviceCallNo,
@@ -589,6 +750,11 @@ class _InventoryTransferRequestScreenState
         ..sort((a, b) => a.label.compareTo(b.label));
       setState(() {
         _employeeOptions = sortedOptions;
+        _employeeLabelsByCode = Map<String, String>.unmodifiable(
+          optionsByCode.map(
+            (key, value) => MapEntry<String, String>(key, value.label),
+          ),
+        );
         if (_employeeCode != null &&
             !_employeeOptions.any((option) => option.code == _employeeCode)) {
           _employeeCode = null;
@@ -679,6 +845,11 @@ class _InventoryTransferRequestScreenState
         ..sort((a, b) => a.label.compareTo(b.label));
       setState(() {
         _opportunityOptions = sortedOptions;
+        _opportunityLabelsByNo = Map<String, String>.unmodifiable(
+          optionsByNo.map(
+            (key, value) => MapEntry<String, String>(key, value.label),
+          ),
+        );
         if (_opportunityNo != null &&
             !_opportunityOptions.any(
               (option) => option.opportunityNo == _opportunityNo,
@@ -779,6 +950,11 @@ class _InventoryTransferRequestScreenState
         ..sort((a, b) => a.label.compareTo(b.label));
       setState(() {
         _connectedTransferOptions = sortedOptions;
+        _connectedTransferLabelsByNo = Map<String, String>.unmodifiable(
+          optionsByNo.map(
+            (key, value) => MapEntry<String, String>(key, value.label),
+          ),
+        );
         if (_connectedTransferNo != null &&
             !_connectedTransferOptions.any(
               (option) => option.transferNo == _connectedTransferNo,
@@ -861,12 +1037,13 @@ class _InventoryTransferRequestScreenState
         ..sort((a, b) => a.itemCode.compareTo(b.itemCode));
       setState(() {
         _itemOptions = sortedOptions;
+        _itemOptionsByCode = Map<String, _ItemOption>.unmodifiable(
+          optionsByCode,
+        );
         for (final row in _items) {
           final selectedCode = row.itemCodeController.text.trim();
-          final matched = _itemOptions.where(
-            (option) => option.itemCode == selectedCode,
-          );
-          if (selectedCode.isNotEmpty && matched.isEmpty) {
+          if (selectedCode.isNotEmpty &&
+              !_itemOptionsByCode.containsKey(selectedCode)) {
             row.itemCodeController.text = '';
             row.descriptionController.text = '';
           }
@@ -950,12 +1127,17 @@ class _InventoryTransferRequestScreenState
         ..sort((a, b) => a.label.compareTo(b.label));
       setState(() {
         _projectOptions = sortedOptions;
+        _projectLabelsByCode = Map<String, String>.unmodifiable(
+          optionsByCode.map(
+            (key, value) => MapEntry<String, String>(key, value.label),
+          ),
+        );
         for (final row in _items) {
           final selectedCode = row.projectController.text.trim();
-          final matched = _projectOptions.where(
-            (option) => option.projectCode == selectedCode,
-          );
-          if (selectedCode.isNotEmpty && matched.isEmpty) {
+          if (selectedCode.isNotEmpty &&
+              !_projectOptions.any(
+                (option) => option.projectCode == selectedCode,
+              )) {
             row.projectController.text = '';
           }
         }
@@ -980,7 +1162,6 @@ class _InventoryTransferRequestScreenState
     );
     if (picked == null) return;
     controller.text = _formatDate(picked);
-    if (mounted) setState(() {});
   }
 
   void _addItemRow() {
@@ -1011,10 +1192,407 @@ class _InventoryTransferRequestScreenState
     }
   }
 
-  void _onSubmit() {
+  Future<void> _onSubmit() async {
     if (!_formKey.currentState!.validate()) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Inventory Transfer Request submitted')),
+
+    final payload = <String, dynamic>{
+      'DocumentNo': _documentNoController.text.trim(),
+      'PostingDate': _toApiDate(_postingDateController.text),
+      'DueDate': _toApiDate(_dueDateController.text),
+      'DocumentDate': _toApiDate(_documentDateController.text),
+      'APKUSERID': UserSession.loggedInEmail,
+      'Lines': _items
+          .map(
+            (row) {
+              final line = <String, dynamic>{
+                'Description': row.descriptionController.text.trim(),
+                'SerialNo': row.serialNoController.text.trim(),
+                'Quantity':
+                    double.tryParse(row.quantityController.text.trim()) ?? 0,
+                'CheckedBy': row.checkedByController.text.trim(),
+                'CheckedDate': _toApiDate(row.checkedDateController.text),
+                'NextCheck': _toApiDate(row.nextCheckController.text),
+                'Remarks': row.remarksController.text.trim(),
+              };
+              _putIfNotBlank(line, 'ItemCode', row.itemCodeController.text);
+              _putIfNotBlank(line, 'FromWhs', row.fromWhsController.text);
+              _putIfNotBlank(line, 'ToWhs', row.toWhsController.text);
+              _putIfNotBlank(line, 'Project', row.projectController.text);
+              if (row.previousDateController.text.trim().isNotEmpty) {
+                line['PreviousDate'] =
+                    _toApiDate(row.previousDateController.text);
+              }
+              return line;
+            },
+          )
+          .toList(growable: false),
+    };
+    _putIfNotBlank(payload, 'TransferType', _transferType);
+    _putIfNotBlank(payload, 'FromWarehouse', _fromWarehouse);
+    _putIfNotBlank(payload, 'ToWarehouse', _toWarehouse);
+    _putIfNotBlank(
+      payload,
+      'DemoStartDate',
+      _toApiDate(_demoStartDateController.text),
+    );
+    _putIfNotBlank(
+      payload,
+      'DemoEndDate',
+      _toApiDate(_demoEndDateController.text),
+    );
+    _putIfNotBlank(
+      payload,
+      'ExpectedReturnDate',
+      _toApiDate(_expectedReturnDateController.text),
+    );
+    _putIfNotBlank(payload, 'SalesOrderNo', _salesOrderNo);
+    _putIfNotBlank(payload, 'ServiceCallNo', _serviceCallNo);
+    _putIfNotBlank(payload, 'ByDepartment', _byDepartmentController.text);
+    _putIfNotBlank(
+      payload,
+      'ResponsibleDepartment',
+      _responsibleDepartmentController.text,
+    );
+    _putIfNotBlank(payload, 'EmployeeCode', _employeeCode);
+    _putIfNotBlank(payload, 'Team', _teamController.text);
+    _putIfNotBlank(payload, 'Status', _status);
+    _putIfNotBlank(payload, 'ImportantNote', _importantNoteController.text);
+    _putIfNotBlank(payload, 'Remarks', _remarksController.text);
+    _putIfNotBlank(payload, 'OpportunityNo', _opportunityNo);
+    _putIfNotBlank(payload, 'ConnectedTransferNo', _connectedTransferNo);
+    _putIfNotBlank(
+      payload,
+      'Businesspartner',
+      _extractLeadingCode(_businessPartner ?? ''),
+    );
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      final uri = Uri.parse(
+        '${ApiConstants.baseUrl}${ApiConstants.createInventoryTransferRequestPath}',
+      );
+      final response = await http
+          .post(
+            uri,
+            headers: <String, String>{
+              ..._getHeaders(),
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Submit failed (${response.statusCode})');
+      }
+
+      String message = 'Inventory Transfer Request submitted successfully';
+      final body = response.body.trim();
+      if (body.isNotEmpty) {
+        final decoded = jsonDecode(body);
+        if (decoded is Map<String, dynamic>) {
+          final serverMessage = decoded['message']?.toString().trim();
+          if (serverMessage != null && serverMessage.isNotEmpty) {
+            message = serverMessage;
+          }
+
+          final serverDocNo = _readValue(decoded, <String>[
+            'DocumentNo',
+            'InventorytransferReqNo',
+            'InventoryTransferReqNo',
+            'DocNo',
+            'DocNum',
+          ]);
+          if (serverDocNo.isNotEmpty) {
+            _documentNoController.text = serverDocNo;
+          }
+        }
+      }
+
+      final documentNo = _documentNoController.text.trim();
+      if (documentNo.isNotEmpty &&
+          !message.toLowerCase().contains(documentNo.toLowerCase())) {
+        message = '$message\nDocument No: $documentNo';
+      }
+
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Success'),
+            content: Text(message),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Submit failed: $error')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  int get _screenChildCount => 8 + _items.length;
+
+  Widget _buildScreenChild(int index) {
+    if (index == 0) {
+      return _buildTransferDetailsSection();
+    }
+    if (index == 1 || index == 3 || index == 5 || index == _screenChildCount - 1) {
+      return const SizedBox(height: 10);
+    }
+    if (index == 2) {
+      return _buildDepartmentNotesSection();
+    }
+    if (index == 4) {
+      return _buildDocumentDetailsSection();
+    }
+    if (index == 6) {
+      return _buildItemsHeaderCard();
+    }
+
+    final itemIndex = index - 7;
+    if (itemIndex >= 0 && itemIndex < _items.length) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: RepaintBoundary(child: _itemRowCard(itemIndex)),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildTransferDetailsSection() {
+    return RepaintBoundary(
+      child: _sectionCard(
+        title: 'Transfer Details',
+        child: Column(
+          children: [
+            _dropdownField(
+              label: 'Business Partner',
+              value: _businessPartner,
+              onTap: () async {
+                final selected = await _showOptionPicker(
+                  title: 'Business Partner',
+                  options: _withNonePickerOption(
+                    _businessPartnerOptions
+                      .map(
+                        (option) =>
+                            _PickerOption(value: option, label: option),
+                      )
+                      .toList(growable: false),
+                  ),
+                );
+                if (selected == null) return;
+                setState(() => _businessPartner = _normalizeSelectedOption(selected));
+              },
+            ),
+            _dropdownField(
+              label: 'Transfer Type',
+              value: _transferType,
+              options: _transferTypeOptions,
+              onChanged: (value) {
+                setState(() => _transferType = value ?? '');
+              },
+            ),
+            _warehouseDropdownField(
+              label: 'From Warehouse',
+              value: _fromWarehouse,
+              options: _warehouseOptions,
+              onChanged: (value) => setState(() {
+                _fromWarehouse = value;
+                _applyHeaderWarehousesToRows();
+              }),
+              requiredField: true,
+            ),
+            _warehouseDropdownField(
+              label: 'To Warehouse',
+              value: _toWarehouse,
+              options: _warehouseOptions,
+              onChanged: (value) => setState(() {
+                _toWarehouse = value;
+                _applyHeaderWarehousesToRows();
+              }),
+              requiredField: true,
+            ),
+            _dateField(
+              label: 'Demo Start Date',
+              controller: _demoStartDateController,
+            ),
+            _dateField(
+              label: 'Demo End Date',
+              controller: _demoEndDateController,
+            ),
+            _dateField(
+              label: 'Expected Return Date',
+              controller: _expectedReturnDateController,
+            ),
+            _salesOrderDropdownField(
+              label: 'Sales Order No',
+              value: _salesOrderNo,
+              options: _salesOrderOptions,
+              onChanged: (value) => setState(() {
+                _salesOrderNo = value;
+                _salesOrderNoController.text = value ?? '';
+              }),
+            ),
+            _serviceCallDropdownField(
+              label: 'Service Call No',
+              value: _serviceCallNo,
+              options: _serviceCallOptions,
+              onChanged: (value) => setState(() {
+                _serviceCallNo = value;
+                _serviceCallNoController.text = value ?? '';
+              }),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDepartmentNotesSection() {
+    return RepaintBoundary(
+      child: _sectionCard(
+        title: 'Department & Notes',
+        child: Column(
+          children: [
+            _dropdownField(
+              label: 'By Department',
+              value: _byDepartmentController.text.isEmpty
+                  ? null
+                  : _byDepartmentController.text,
+              options: _departmentOptions,
+              onChanged: (value) => setState(() {
+                _byDepartmentController.text = value ?? '';
+              }),
+            ),
+            _dropdownField(
+              label: 'Responsible Department',
+              value: _responsibleDepartmentController.text.isEmpty
+                  ? null
+                  : _responsibleDepartmentController.text,
+              options: _departmentOptions,
+              onChanged: (value) => setState(() {
+                _responsibleDepartmentController.text = value ?? '';
+              }),
+            ),
+            _employeeDropdownField(
+              label: 'Employee Code',
+              value: _employeeCode,
+              options: _employeeOptions,
+              onChanged: (value) => setState(() {
+                _employeeCode = value;
+                _employeeCodeController.text = value ?? '';
+              }),
+            ),
+            _textField(
+              label: 'Team',
+              controller: _teamController,
+            ),
+            _dropdownField(
+              label: 'Status',
+              value: _status,
+              options: _statusOptions,
+              onChanged: (value) {
+                setState(() => _status = value ?? '');
+              },
+            ),
+            _textField(
+              label: 'Important Note',
+              controller: _importantNoteController,
+              maxLines: 3,
+            ),
+            _textField(
+              label: 'Remarks',
+              controller: _remarksController,
+              maxLines: 3,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDocumentDetailsSection() {
+    return RepaintBoundary(
+      child: _sectionCard(
+        title: 'Document Details',
+        child: Column(
+          children: [
+            _textField(
+              label: 'Document No',
+              controller: _documentNoController,
+              readOnly: true,
+            ),
+            _dateField(
+              label: 'Posting Date',
+              controller: _postingDateController,
+            ),
+            _dateField(
+              label: 'Due Date',
+              controller: _dueDateController,
+            ),
+            _dateField(
+              label: 'Document Date',
+              controller: _documentDateController,
+            ),
+            _opportunityDropdownField(
+              label: 'Opportunity No',
+              value: _opportunityNo,
+              options: _opportunityOptions,
+              onChanged: (value) => setState(() {
+                _opportunityNo = value;
+                _opportunityNoController.text = value ?? '';
+              }),
+            ),
+            _connectedTransferDropdownField(
+              label: 'Connected Transfer No',
+              value: _connectedTransferNo,
+              options: _connectedTransferOptions,
+              onChanged: (value) => setState(() {
+                _connectedTransferNo = value;
+                _connectedTransferNoController.text = value ?? '';
+              }),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildItemsHeaderCard() {
+    return RepaintBoundary(
+      child: _sectionCard(
+        title: 'Items',
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.icon(
+            onPressed: _addItemRow,
+            icon: const Icon(Icons.add),
+            label: const Text('Add Row'),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1032,8 +1610,14 @@ class _InventoryTransferRequestScreenState
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(
-              onPressed: _onSubmit,
-              child: const Text('Submit'),
+              onPressed: _isSubmitting ? null : _onSubmit,
+              child: _isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Submit'),
             ),
           ),
         ],
@@ -1041,207 +1625,10 @@ class _InventoryTransferRequestScreenState
       body: SafeArea(
         child: Form(
           key: _formKey,
-          child: ListView(
+          child: ListView.builder(
             padding: const EdgeInsets.all(12),
-            children: [
-              _sectionCard(
-                title: 'Transfer Details',
-                child: Column(
-                  children: [
-                    _dropdownField(
-                      label: 'Business Partner',
-                      value: _businessPartner,
-                      options: _businessPartnerOptions,
-                      onChanged: (value) =>
-                          setState(() => _businessPartner = value),
-                    ),
-                    _dropdownField(
-                      label: 'Transfer Type',
-                      value: _transferType,
-                      options: _transferTypeOptions,
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() => _transferType = value);
-                      },
-                    ),
-                    _warehouseDropdownField(
-                      label: 'From Warehouse',
-                      value: _fromWarehouse,
-                      options: _warehouseOptions,
-                      onChanged: (value) => setState(() {
-                        _fromWarehouse = value;
-                        _applyHeaderWarehousesToRows();
-                      }),
-                      requiredField: true,
-                    ),
-                    _warehouseDropdownField(
-                      label: 'To Warehouse',
-                      value: _toWarehouse,
-                      options: _warehouseOptions,
-                      onChanged: (value) => setState(() {
-                        _toWarehouse = value;
-                        _applyHeaderWarehousesToRows();
-                      }),
-                      requiredField: true,
-                    ),
-                    _dateField(
-                      label: 'Demo Start Date',
-                      controller: _demoStartDateController,
-                    ),
-                    _dateField(
-                      label: 'Demo End Date',
-                      controller: _demoEndDateController,
-                    ),
-                    _dateField(
-                      label: 'Expected Return Date',
-                      controller: _expectedReturnDateController,
-                    ),
-                    _salesOrderDropdownField(
-                      label: 'Sales Order No',
-                      value: _salesOrderNo,
-                      options: _salesOrderOptions,
-                      onChanged: (value) => setState(() {
-                        _salesOrderNo = value;
-                        _salesOrderNoController.text = value ?? '';
-                      }),
-                    ),
-                    _serviceCallDropdownField(
-                      label: 'Service Call No',
-                      value: _serviceCallNo,
-                      options: _serviceCallOptions,
-                      onChanged: (value) => setState(() {
-                        _serviceCallNo = value;
-                        _serviceCallNoController.text = value ?? '';
-                      }),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-              _sectionCard(
-                title: 'Department & Notes',
-                child: Column(
-                  children: [
-                    _dropdownField(
-                      label: 'By Department',
-                      value: _byDepartmentController.text.isEmpty
-                          ? null
-                          : _byDepartmentController.text,
-                      options: _departmentOptions,
-                      onChanged: (value) => setState(() {
-                        _byDepartmentController.text = value ?? '';
-                      }),
-                    ),
-                    _dropdownField(
-                      label: 'Responsible Department',
-                      value: _responsibleDepartmentController.text.isEmpty
-                          ? null
-                          : _responsibleDepartmentController.text,
-                      options: _departmentOptions,
-                      onChanged: (value) => setState(() {
-                        _responsibleDepartmentController.text = value ?? '';
-                      }),
-                    ),
-                    _employeeDropdownField(
-                      label: 'Employee Code',
-                      value: _employeeCode,
-                      options: _employeeOptions,
-                      onChanged: (value) => setState(() {
-                        _employeeCode = value;
-                        _employeeCodeController.text = value ?? '';
-                      }),
-                    ),
-                    _textField(
-                      label: 'Team',
-                      controller: _teamController,
-                    ),
-                    _dropdownField(
-                      label: 'Status',
-                      value: _status,
-                      options: _statusOptions,
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() => _status = value);
-                      },
-                    ),
-                    _textField(
-                      label: 'Important Note',
-                      controller: _importantNoteController,
-                      maxLines: 3,
-                    ),
-                    _textField(
-                      label: 'Remarks',
-                      controller: _remarksController,
-                      maxLines: 3,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-              _sectionCard(
-                title: 'Document Details',
-                child: Column(
-                  children: [
-                    _textField(
-                      label: 'Document No',
-                      controller: _documentNoController,
-                    ),
-                    _dateField(
-                      label: 'Posting Date',
-                      controller: _postingDateController,
-                    ),
-                    _dateField(
-                      label: 'Due Date',
-                      controller: _dueDateController,
-                    ),
-                    _dateField(
-                      label: 'Document Date',
-                      controller: _documentDateController,
-                    ),
-                    _opportunityDropdownField(
-                      label: 'Opportunity No',
-                      value: _opportunityNo,
-                      options: _opportunityOptions,
-                      onChanged: (value) => setState(() {
-                        _opportunityNo = value;
-                        _opportunityNoController.text = value ?? '';
-                      }),
-                    ),
-                    _connectedTransferDropdownField(
-                      label: 'Connected Transfer No',
-                      value: _connectedTransferNo,
-                      options: _connectedTransferOptions,
-                      onChanged: (value) => setState(() {
-                        _connectedTransferNo = value;
-                        _connectedTransferNoController.text = value ?? '';
-                      }),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-              _sectionCard(
-                title: 'Items',
-                child: Column(
-                  children: [
-                    for (int i = 0; i < _items.length; i++)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _itemRowCard(i),
-                      ),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: FilledButton.icon(
-                        onPressed: _addItemRow,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add Row'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
+            itemCount: _screenChildCount,
+            itemBuilder: (context, index) => _buildScreenChild(index),
           ),
         ),
       ),
@@ -1281,10 +1668,7 @@ class _InventoryTransferRequestScreenState
                 : row.itemCodeController.text.trim(),
             options: _itemOptions,
             onChanged: (value) {
-              final selected = _itemOptions.where(
-                (option) => option.itemCode == value,
-              );
-              final item = selected.isEmpty ? null : selected.first;
+              final item = value == null ? null : _itemOptionsByCode[value];
               setState(() {
                 row.itemCodeController.text = value ?? '';
                 row.descriptionController.text = item?.description ?? '';
@@ -1397,24 +1781,42 @@ class _InventoryTransferRequestScreenState
   Widget _dropdownField({
     required String label,
     required String? value,
-    required List<String> options,
-    required ValueChanged<String?> onChanged,
+    List<String> options = const <String>[],
+    Future<void> Function()? onTap,
+    ValueChanged<String?>? onChanged,
     bool requiredField = false,
   }) {
+    if (onTap != null) {
+      return _pickerField(
+        label: label,
+        value: value,
+        displayText: value,
+        onTap: onTap,
+        requiredField: requiredField,
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: DropdownButtonFormField<String>(
-        initialValue: value,
-        items: options
+        initialValue: _isNoneOrEmpty(value) ? null : value,
+        isExpanded: true,
+        items: _withNoneStringOption(options)
             .map((option) => DropdownMenuItem<String>(
                   value: option,
-                  child: Text(option),
+                  child: _dropdownLabel(option),
                 ))
-            .toList(),
-        onChanged: onChanged,
+            .toList(growable: false),
+        onChanged: (selected) => onChanged?.call(
+          selected == _noneOption ? null : selected,
+        ),
         validator: requiredField
             ? (selected) =>
-                (selected == null || selected.isEmpty) ? 'Please select $label' : null
+                (selected == null ||
+                        selected.isEmpty ||
+                        selected == _noneOption)
+                    ? 'Please select $label'
+                    : null
             : null,
         decoration: InputDecoration(
           labelText: label,
@@ -1432,30 +1834,27 @@ class _InventoryTransferRequestScreenState
     required ValueChanged<String?> onChanged,
     bool requiredField = false,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: DropdownButtonFormField<String>(
-        initialValue: value,
-        items: options
-            .map(
-              (option) => DropdownMenuItem<String>(
-                value: option.code,
-                child: Text(option.label),
-              ),
-            )
-            .toList(),
-        onChanged: onChanged,
-        validator: requiredField
-            ? (selected) => (selected == null || selected.isEmpty)
-                ? 'Please select $label'
-                : null
-            : null,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-      ),
+    return _pickerField(
+      label: label,
+      value: value,
+      displayText: value == null ? null : _warehouseLabelsByCode[value],
+      requiredField: requiredField,
+      onTap: () async {
+        final selected = await _showOptionPicker(
+          title: label,
+          options: _withNonePickerOption(
+            options
+              .map(
+                (option) =>
+                    _PickerOption(value: option.code, label: option.label),
+              )
+              .toList(growable: false),
+          ),
+        );
+        if (selected != null) {
+          onChanged(_normalizeSelectedOption(selected));
+        }
+      },
     );
   }
 
@@ -1465,25 +1864,26 @@ class _InventoryTransferRequestScreenState
     required List<_SalesOrderOption> options,
     required ValueChanged<String?> onChanged,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: DropdownButtonFormField<String>(
-        initialValue: value,
-        items: options
-            .map(
-              (option) => DropdownMenuItem<String>(
-                value: option.soNo,
-                child: Text(option.label),
-              ),
-            )
-            .toList(),
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-      ),
+    return _pickerField(
+      label: label,
+      value: value,
+      displayText: value == null ? null : _salesOrderLabelsByNo[value],
+      onTap: () async {
+        final selected = await _showOptionPicker(
+          title: label,
+          options: _withNonePickerOption(
+            options
+              .map(
+                (option) =>
+                    _PickerOption(value: option.soNo, label: option.label),
+              )
+              .toList(growable: false),
+          ),
+        );
+        if (selected != null) {
+          onChanged(_normalizeSelectedOption(selected));
+        }
+      },
     );
   }
 
@@ -1493,25 +1893,26 @@ class _InventoryTransferRequestScreenState
     required List<_ServiceCallOption> options,
     required ValueChanged<String?> onChanged,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: DropdownButtonFormField<String>(
-        initialValue: value,
-        items: options
-            .map(
-              (option) => DropdownMenuItem<String>(
-                value: option.callId,
-                child: Text(option.label),
-              ),
-            )
-            .toList(),
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-      ),
+    return _pickerField(
+      label: label,
+      value: value,
+      displayText: value == null ? null : _serviceCallLabelsById[value],
+      onTap: () async {
+        final selected = await _showOptionPicker(
+          title: label,
+          options: _withNonePickerOption(
+            options
+              .map(
+                (option) =>
+                    _PickerOption(value: option.callId, label: option.label),
+              )
+              .toList(growable: false),
+          ),
+        );
+        if (selected != null) {
+          onChanged(_normalizeSelectedOption(selected));
+        }
+      },
     );
   }
 
@@ -1521,25 +1922,26 @@ class _InventoryTransferRequestScreenState
     required List<_EmployeeOption> options,
     required ValueChanged<String?> onChanged,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: DropdownButtonFormField<String>(
-        initialValue: value,
-        items: options
-            .map(
-              (option) => DropdownMenuItem<String>(
-                value: option.code,
-                child: Text(option.label),
-              ),
-            )
-            .toList(),
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-      ),
+    return _pickerField(
+      label: label,
+      value: value,
+      displayText: value == null ? null : _employeeLabelsByCode[value],
+      onTap: () async {
+        final selected = await _showOptionPicker(
+          title: label,
+          options: _withNonePickerOption(
+            options
+              .map(
+                (option) =>
+                    _PickerOption(value: option.code, label: option.label),
+              )
+              .toList(growable: false),
+          ),
+        );
+        if (selected != null) {
+          onChanged(_normalizeSelectedOption(selected));
+        }
+      },
     );
   }
 
@@ -1549,25 +1951,28 @@ class _InventoryTransferRequestScreenState
     required List<_OpportunityOption> options,
     required ValueChanged<String?> onChanged,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: DropdownButtonFormField<String>(
-        initialValue: value,
-        items: options
-            .map(
-              (option) => DropdownMenuItem<String>(
-                value: option.opportunityNo,
-                child: Text(option.label),
-              ),
-            )
-            .toList(),
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-      ),
+    return _pickerField(
+      label: label,
+      value: value,
+      displayText: value == null ? null : _opportunityLabelsByNo[value],
+      onTap: () async {
+        final selected = await _showOptionPicker(
+          title: label,
+          options: _withNonePickerOption(
+            options
+              .map(
+                (option) => _PickerOption(
+                  value: option.opportunityNo,
+                  label: option.label,
+                ),
+              )
+              .toList(growable: false),
+          ),
+        );
+        if (selected != null) {
+          onChanged(_normalizeSelectedOption(selected));
+        }
+      },
     );
   }
 
@@ -1577,25 +1982,28 @@ class _InventoryTransferRequestScreenState
     required List<_ConnectedTransferOption> options,
     required ValueChanged<String?> onChanged,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: DropdownButtonFormField<String>(
-        initialValue: value,
-        items: options
-            .map(
-              (option) => DropdownMenuItem<String>(
-                value: option.transferNo,
-                child: Text(option.label),
-              ),
-            )
-            .toList(),
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-      ),
+    return _pickerField(
+      label: label,
+      value: value,
+      displayText: value == null ? null : _connectedTransferLabelsByNo[value],
+      onTap: () async {
+        final selected = await _showOptionPicker(
+          title: label,
+          options: _withNonePickerOption(
+            options
+              .map(
+                (option) => _PickerOption(
+                  value: option.transferNo,
+                  label: option.label,
+                ),
+              )
+              .toList(growable: false),
+          ),
+        );
+        if (selected != null) {
+          onChanged(_normalizeSelectedOption(selected));
+        }
+      },
     );
   }
 
@@ -1605,25 +2013,29 @@ class _InventoryTransferRequestScreenState
     required List<_ItemOption> options,
     required ValueChanged<String?> onChanged,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: DropdownButtonFormField<String>(
-        initialValue: value,
-        items: options
-            .map(
-              (option) => DropdownMenuItem<String>(
-                value: option.itemCode,
-                child: Text(option.itemCode),
-              ),
-            )
-            .toList(),
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-      ),
+    return _pickerField(
+      label: label,
+      value: value,
+      displayText: value,
+      onTap: () async {
+        final selected = await _showOptionPicker(
+          title: label,
+          options: _withNonePickerOption(
+            options
+              .map(
+                (option) => _PickerOption(
+                  value: option.itemCode,
+                  label: option.itemCode,
+                  subtitle: option.description,
+                ),
+              )
+              .toList(growable: false),
+          ),
+        );
+        if (selected != null) {
+          onChanged(_normalizeSelectedOption(selected));
+        }
+      },
     );
   }
 
@@ -1633,25 +2045,158 @@ class _InventoryTransferRequestScreenState
     required List<_ProjectOption> options,
     required ValueChanged<String?> onChanged,
   }) {
+    return _pickerField(
+      label: label,
+      value: value,
+      displayText: value == null ? null : _projectLabelsByCode[value],
+      onTap: () async {
+        final selected = await _showOptionPicker(
+          title: label,
+          options: _withNonePickerOption(
+            options
+              .map(
+                (option) => _PickerOption(
+                  value: option.projectCode,
+                  label: option.label,
+                ),
+              )
+              .toList(growable: false),
+          ),
+        );
+        if (selected != null) {
+          onChanged(_normalizeSelectedOption(selected));
+        }
+      },
+    );
+  }
+
+  Widget _pickerField({
+    required String label,
+    required String? value,
+    required Future<void> Function() onTap,
+    String? displayText,
+    bool requiredField = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: DropdownButtonFormField<String>(
+      child: FormField<String>(
         initialValue: value,
-        items: options
-            .map(
-              (option) => DropdownMenuItem<String>(
-                value: option.projectCode,
-                child: Text(option.label),
+        validator: requiredField
+            ? (selected) => (selected == null || selected.isEmpty)
+                ? 'Please select $label'
+                : null
+            : null,
+        builder: (field) {
+          final text = displayText?.trim() ?? '';
+          final hasValue = text.isNotEmpty;
+          return InkWell(
+            onTap: () async {
+              await onTap();
+              field.didChange(value);
+            },
+            child: InputDecorator(
+              isEmpty: !hasValue,
+              decoration: InputDecoration(
+                labelText: label,
+                hintText: hasValue ? null : 'Select $label',
+                border: const OutlineInputBorder(),
+                isDense: true,
+                errorText: field.errorText,
+                suffixIcon: const Icon(Icons.search),
               ),
-            )
-            .toList(),
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
+              child: hasValue
+                  ? Text(
+                      text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          );
+        },
       ),
+    );
+  }
+
+  Future<String?> _showOptionPicker({
+    required String title,
+    required List<_PickerOption> options,
+  }) {
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        String query = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filtered = options.where((option) {
+              final searchText =
+                  '${option.label} ${option.subtitle ?? ''} ${option.value}'
+                      .toLowerCase();
+              return searchText.contains(query.toLowerCase());
+            }).toList(growable: false);
+
+            return SafeArea(
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height * 0.8,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: TextField(
+                        autofocus: true,
+                        onChanged: (value) =>
+                            setModalState(() => query = value),
+                        decoration: InputDecoration(
+                          labelText: title,
+                          hintText: 'Search',
+                          prefixIcon: const Icon(Icons.search),
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final option = filtered[index];
+                          return ListTile(
+                            title: Text(
+                              option.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: option.subtitle == null ||
+                                    option.subtitle!.trim().isEmpty
+                                ? null
+                                : Text(
+                                    option.subtitle!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                            onTap: () =>
+                                Navigator.of(sheetContext).pop(option.value),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _dropdownLabel(String text) {
+    return Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      softWrap: false,
     );
   }
 
@@ -1705,6 +2250,18 @@ class _InventoryItemRow {
     nextCheckController.dispose();
     remarksController.dispose();
   }
+}
+
+class _PickerOption {
+  const _PickerOption({
+    required this.value,
+    required this.label,
+    this.subtitle,
+  });
+
+  final String value;
+  final String label;
+  final String? subtitle;
 }
 
 class _WarehouseOption {

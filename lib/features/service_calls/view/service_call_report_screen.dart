@@ -37,12 +37,14 @@ class _ServiceCallReportScreenState extends State<ServiceCallReportScreen> {
     });
     try {
       final rows = await _serviceCallViewModel.fetchAllServiceCalls();
+      final sortedRows = List<ServiceCallReportItem>.from(rows)
+        ..sort(_compareServiceCallRowsDescending);
       if (!mounted) return;
       setState(() {
-        _allRows = rows;
+        _allRows = sortedRows;
       });
       _applyFilters();
-      print('RPT_V3: _loadRows success (${rows.length})');
+      print('RPT_V3: _loadRows success (${sortedRows.length})');
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -395,7 +397,39 @@ class _ServiceCallReportScreenState extends State<ServiceCallReportScreen> {
             row.priority.toLowerCase().contains(priority) &&
             row.assignedTech.toLowerCase().contains(assignedTech) &&
             row.status.toLowerCase().contains(status);
-      }).toList();
+      }).toList()
+        ..sort(_compareServiceCallRowsDescending);
     });
+  }
+
+  int _compareServiceCallRowsDescending(
+    ServiceCallReportItem a,
+    ServiceCallReportItem b,
+  ) {
+    final dateCompare = _parseServiceCallDate(
+      b.createdDate,
+    ).compareTo(_parseServiceCallDate(a.createdDate));
+    if (dateCompare != 0) {
+      return dateCompare;
+    }
+
+    final serviceNoCompare = _extractTrailingNumber(
+      b.serviceNo,
+    ).compareTo(_extractTrailingNumber(a.serviceNo));
+    if (serviceNoCompare != 0) {
+      return serviceNoCompare;
+    }
+
+    return b.serviceNo.toLowerCase().compareTo(a.serviceNo.toLowerCase());
+  }
+
+  DateTime _parseServiceCallDate(String value) {
+    return DateTime.tryParse(value.trim()) ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  int _extractTrailingNumber(String value) {
+    final match = RegExp(r'(\d+)(?!.*\d)').firstMatch(value);
+    return int.tryParse(match?.group(1) ?? '') ?? -1;
   }
 }

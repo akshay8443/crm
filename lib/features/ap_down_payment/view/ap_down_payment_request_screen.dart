@@ -20,6 +20,7 @@ class ApDownPaymentRequestScreen extends StatefulWidget {
 
 class _ApDownPaymentRequestScreenState
     extends State<ApDownPaymentRequestScreen> {
+  static const String _noneOption = 'None';
   final ImagePicker _imagePicker = ImagePicker();
   final List<_DownPaymentItem> _items = [_DownPaymentItem()];
   final List<XFile> _attachments = [];
@@ -74,6 +75,38 @@ class _ApDownPaymentRequestScreenState
     'EmpAdvNoTour',
     'EmpClrNoTour',
   ];
+
+  List<String> _withNoneOption(List<String> options) {
+    final normalized = options
+        .where((option) => option.trim().isNotEmpty)
+        .where((option) => option.trim().toLowerCase() != _noneOption.toLowerCase())
+        .toList(growable: false);
+    return <String>[_noneOption, ...normalized];
+  }
+
+  bool _isNoneOrEmpty(String? value) {
+    final normalized = value?.trim() ?? '';
+    return normalized.isEmpty ||
+        normalized.toLowerCase() == _noneOption.toLowerCase() ||
+        normalized.toLowerCase() == 'select';
+  }
+
+  String _normalizedSelectionValue(String? value) {
+    return _isNoneOrEmpty(value) ? '' : value!.trim();
+  }
+
+  void _putIfNotBlank(Map<String, dynamic> target, String key, String value) {
+    final normalized = value.trim();
+    if (normalized.isNotEmpty) {
+      target[key] = normalized;
+    }
+  }
+
+  void _putIfNumNotNull(Map<String, dynamic> target, String key, num? value) {
+    if (value != null) {
+      target[key] = value;
+    }
+  }
 
   @override
   void initState() {
@@ -432,11 +465,14 @@ class _ApDownPaymentRequestScreenState
               searchHint: 'Search item code',
               onSelected: (selected) {
                 setState(() {
-                  item.itemCodeController.text = selected;
-                  final description = _itemDescriptionByCode[selected];
-                  if (description != null && description.trim().isNotEmpty) {
-                    item.descriptionController.text = description;
-                  }
+                  item.itemCodeController.text = selected ?? '';
+                  final description = selected == null
+                      ? null
+                      : _itemDescriptionByCode[selected];
+                  item.descriptionController.text =
+                      description != null && description.trim().isNotEmpty
+                      ? description
+                      : '';
                 });
               },
             ),
@@ -451,11 +487,12 @@ class _ApDownPaymentRequestScreenState
               searchHint: 'Search description',
               onSelected: (selected) {
                 setState(() {
-                  item.descriptionController.text = selected;
-                  final code = _itemCodeByDescription[selected];
-                  if (code != null && code.trim().isNotEmpty) {
-                    item.itemCodeController.text = code;
-                  }
+                  item.descriptionController.text = selected ?? '';
+                  final code = selected == null
+                      ? null
+                      : _itemCodeByDescription[selected];
+                  item.itemCodeController.text =
+                      code != null && code.trim().isNotEmpty ? code : '';
                 });
               },
             ),
@@ -494,7 +531,7 @@ class _ApDownPaymentRequestScreenState
               searchHint: 'Search tax code',
               onSelected: (selected) {
                 setState(() {
-                  item.taxCodeController.text = selected;
+                  item.taxCodeController.text = selected ?? '';
                 });
               },
             ),
@@ -509,7 +546,7 @@ class _ApDownPaymentRequestScreenState
               searchHint: 'Search warehouse',
               onSelected: (selected) {
                 setState(() {
-                  item.warehouseController.text = selected;
+                  item.warehouseController.text = selected ?? '';
                 });
               },
             ),
@@ -524,7 +561,7 @@ class _ApDownPaymentRequestScreenState
               searchHint: 'Search project',
               onSelected: (selected) {
                 setState(() {
-                  item.projectController.text = selected;
+                  item.projectController.text = selected ?? '';
                 });
               },
             ),
@@ -1817,13 +1854,13 @@ class _ApDownPaymentRequestScreenState
       ),
       onTap: () async {
         final selected = await _openTextPicker(
-          options: options,
+          options: _withNoneOption(options),
           searchHint: searchHint,
           emptyText: 'No data found',
         );
         if (!mounted || selected == null) return;
         setState(() {
-          controller.text = selected;
+          controller.text = _isNoneOrEmpty(selected) ? '' : selected;
         });
       },
     );
@@ -1834,17 +1871,17 @@ class _ApDownPaymentRequestScreenState
     required List<String> options,
     required String hintText,
     required String searchHint,
-    required ValueChanged<String> onSelected,
+    required ValueChanged<String?> onSelected,
   }) {
     return InkWell(
       onTap: () async {
         final selected = await _openTextPicker(
-          options: options,
+          options: _withNoneOption(options),
           searchHint: searchHint,
           emptyText: 'No data found',
         );
         if (selected == null) return;
-        onSelected(selected);
+        onSelected(_isNoneOrEmpty(selected) ? null : selected);
       },
       child: InputDecorator(
         decoration: InputDecoration(
@@ -1881,12 +1918,12 @@ class _ApDownPaymentRequestScreenState
     return InkWell(
       onTap: () async {
         final selected = await _openTextPicker(
-          options: items,
+          options: _withNoneOption(items),
           searchHint: hint,
           emptyText: 'No data found',
         );
         if (selected == null) return;
-        onChanged(selected);
+        onChanged(_isNoneOrEmpty(selected) ? null : selected);
       },
       child: InputDecorator(
         decoration: InputDecoration(
@@ -2020,6 +2057,37 @@ class _ApDownPaymentRequestScreenState
     });
   }
 
+  void _resetFormAfterSubmit() {
+    final now = DateTime.now();
+
+    _vendorRefNoController.clear();
+    _buyerController.clear();
+    _ownerController.clear();
+    _serviceCallController.clear();
+    _salesOrderController.clear();
+    _tourStartDateController.clear();
+    _tourEndDateController.clear();
+    _dpmPercentController.clear();
+    _remarksController.clear();
+    _importantNoteController.clear();
+    _postingDateController.text = _formatDate(now);
+    _dueDateController.text = _formatDate(now);
+
+    for (final item in _items) {
+      item.dispose();
+    }
+
+    setState(() {
+      _responsibleDepartment = null;
+      _priority = null;
+      _paymentType = null;
+      _attachments.clear();
+      _items
+        ..clear()
+        ..add(_DownPaymentItem());
+    });
+  }
+
   String? _validateRequiredFields() {
     final requiredFields = <MapEntry<String, String>>[
       MapEntry('Vendor Ref No', _vendorRefNoController.text),
@@ -2037,7 +2105,7 @@ class _ApDownPaymentRequestScreenState
 
     for (final field in requiredFields) {
       final value = field.value.trim();
-      if (value.isEmpty || value.toLowerCase() == 'select') {
+      if (_isNoneOrEmpty(value)) {
         return '${field.key} is required';
       }
     }
@@ -2106,16 +2174,44 @@ class _ApDownPaymentRequestScreenState
               item.projectController.text.trim().isNotEmpty,
         )
         .map((item) {
-          return <String, dynamic>{
-            'ItemCode': _extractCode(item.itemCodeController.text),
-            'ItemDescription': item.descriptionController.text.trim(),
-            'Qty': _tryParseNum(item.qtyController.text) ?? 0,
-            'UnitPrice': _tryParseNum(item.unitPriceController.text) ?? 0,
-            'Discount': _tryParseNum(item.discountController.text) ?? 0,
-            'TaxCode': _extractCode(item.taxCodeController.text),
-            'Warehouse': _extractCode(item.warehouseController.text),
-            'ProjectCode': _extractCode(item.projectController.text),
-          };
+          final line = <String, dynamic>{};
+          _putIfNotBlank(
+            line,
+            'ItemCode',
+            _extractCode(item.itemCodeController.text),
+          );
+          _putIfNotBlank(
+            line,
+            'ItemDescription',
+            item.descriptionController.text.trim(),
+          );
+          _putIfNumNotNull(line, 'Qty', _tryParseNum(item.qtyController.text));
+          _putIfNumNotNull(
+            line,
+            'UnitPrice',
+            _tryParseNum(item.unitPriceController.text),
+          );
+          _putIfNumNotNull(
+            line,
+            'Discount',
+            _tryParseNum(item.discountController.text),
+          );
+          _putIfNotBlank(
+            line,
+            'TaxCode',
+            _extractCode(item.taxCodeController.text),
+          );
+          _putIfNotBlank(
+            line,
+            'Warehouse',
+            _extractCode(item.warehouseController.text),
+          );
+          _putIfNotBlank(
+            line,
+            'ProjectCode',
+            _extractCode(item.projectController.text),
+          );
+          return line;
         })
         .toList();
 
@@ -2128,24 +2224,60 @@ class _ApDownPaymentRequestScreenState
 
     final payload = <String, dynamic>{
       'DocNo': _apDownPaymentNoController.text.trim(),
-      'VendorRefNo': _extractCode(_vendorRefNoController.text),
-      'Buyer': _buyerController.text.trim(),
-      'ResponsibleDept': (_responsibleDepartment ?? '').trim(),
-      'Owner': _extractCode(_ownerController.text),
-      'Priority': (_priority ?? '').trim(),
-      'PaymentType': (_paymentType ?? '').trim(),
-      'ServiceCall': _extractCode(_serviceCallController.text),
-      'SalesOrder': _extractCode(_salesOrderController.text),
       'PostingDate': _toApiDate(_postingDateController.text),
       'DueDate': _toApiDate(_dueDateController.text),
-      'DPMPercent': _tryParseNum(_dpmPercentController.text) ?? 0,
-      'TourStartDate': _toApiDate(_tourStartDateController.text),
-      'TourEndDate': _toApiDate(_tourEndDateController.text),
-      'Remarks': _remarksController.text.trim(),
-      'ImportantNote': _importantNoteController.text.trim(),
       'APKUSERID': UserSession.loggedInEmail,
       'Lines': linePayload,
     };
+    _putIfNotBlank(
+      payload,
+      'VendorRefNo',
+      _extractCode(_vendorRefNoController.text),
+    );
+    _putIfNotBlank(payload, 'Buyer', _buyerController.text.trim());
+    _putIfNotBlank(
+      payload,
+      'ResponsibleDept',
+      _normalizedSelectionValue(_responsibleDepartment),
+    );
+    _putIfNotBlank(payload, 'Owner', _extractCode(_ownerController.text));
+    _putIfNotBlank(payload, 'Priority', _normalizedSelectionValue(_priority));
+    _putIfNotBlank(
+      payload,
+      'PaymentType',
+      _normalizedSelectionValue(_paymentType),
+    );
+    _putIfNotBlank(
+      payload,
+      'ServiceCall',
+      _extractCode(_serviceCallController.text),
+    );
+    _putIfNotBlank(
+      payload,
+      'SalesOrder',
+      _extractCode(_salesOrderController.text),
+    );
+    _putIfNumNotNull(
+      payload,
+      'DPMPercent',
+      _tryParseNum(_dpmPercentController.text),
+    );
+    _putIfNotBlank(
+      payload,
+      'TourStartDate',
+      _toApiDate(_tourStartDateController.text),
+    );
+    _putIfNotBlank(
+      payload,
+      'TourEndDate',
+      _toApiDate(_tourEndDateController.text),
+    );
+    _putIfNotBlank(payload, 'Remarks', _remarksController.text.trim());
+    _putIfNotBlank(
+      payload,
+      'ImportantNote',
+      _importantNoteController.text.trim(),
+    );
 
     try {
       setState(() {
@@ -2179,6 +2311,7 @@ class _ApDownPaymentRequestScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('AP Down Payment submitted successfully')),
       );
+      _resetFormAfterSubmit();
       _fetchNextApDownPaymentNumber();
     } catch (_) {
       if (!mounted) return;
