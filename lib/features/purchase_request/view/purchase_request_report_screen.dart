@@ -124,11 +124,16 @@ class _PurchaseRequestReportScreenState
       }
 
       final mappedRows = <_PurchaseRequestRow>[];
+      final seenDocNos = <String>{};
       for (final row in rows) {
         if (row is! Map<String, dynamic>) continue;
+        final docNo = _readValue(row, const ['DocNo', 'DocNum', 'DocumentNo']);
+        if (docNo.isEmpty || !seenDocNos.add(docNo.toLowerCase())) {
+          continue;
+        }
         mappedRows.add(
           _PurchaseRequestRow(
-            _readValue(row, const ['DocNo', 'DocNum', 'DocumentNo']),
+            docNo,
             _readValue(row, const ['Requester']),
             _formatApiDate(_readValue(row, const ['DocDate', 'DocumentDate'])),
             _readValue(row, const ['Priority']),
@@ -273,7 +278,16 @@ class _PurchaseRequestReportScreenState
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => PurchaseRequestScreen(initialDocNo: docNo),
+        builder: (_) => PurchaseRequestScreen(
+          initialDocNo: docNo,
+          initialHeaderData: PurchaseRequestHeaderData(
+            docDate: row.docDate,
+            requester: row.requester,
+            priority: row.priority,
+            department: row.department,
+            remarks: row.remarks,
+          ),
+        ),
       ),
     );
   }

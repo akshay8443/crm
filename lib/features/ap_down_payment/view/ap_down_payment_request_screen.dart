@@ -26,6 +26,8 @@ class _ApDownPaymentRequestScreenState
   final List<XFile> _attachments = [];
 
   final _vendorRefNoController = TextEditingController();
+  final _cardCodeController = TextEditingController();
+  final _cardNameController = TextEditingController();
   final _buyerController = TextEditingController();
   final _ownerController = TextEditingController();
   final _serviceCallController = TextEditingController();
@@ -44,19 +46,16 @@ class _ApDownPaymentRequestScreenState
   String? _responsibleDepartment;
   String? _priority;
   String? _paymentType;
-  List<String> _vendorRefOptions = const [];
+  List<_VendorOption> _vendorOptions = const [];
   List<String> _buyerOptions = const [];
   List<String> _ownerOptions = const [];
   List<String> _departmentOptions = const [];
   List<String> _salesOrderOptions = const [];
   List<String> _serviceCallOptions = const [];
-  List<String> _itemCodeOptions = const [];
-  List<String> _itemDescriptionOptions = const [];
+  List<_ItemOption> _itemOptions = const [];
   List<String> _taxCodeOptions = const [];
   List<String> _warehouseOptions = const [];
   List<String> _projectOptions = const [];
-  Map<String, String> _itemDescriptionByCode = const {};
-  Map<String, String> _itemCodeByDescription = const {};
   bool _isSubmitting = false;
 
   final List<String> _priorityOptions = const [
@@ -79,7 +78,9 @@ class _ApDownPaymentRequestScreenState
   List<String> _withNoneOption(List<String> options) {
     final normalized = options
         .where((option) => option.trim().isNotEmpty)
-        .where((option) => option.trim().toLowerCase() != _noneOption.toLowerCase())
+        .where(
+          (option) => option.trim().toLowerCase() != _noneOption.toLowerCase(),
+        )
         .toList(growable: false);
     return <String>[_noneOption, ...normalized];
   }
@@ -133,6 +134,8 @@ class _ApDownPaymentRequestScreenState
       item.dispose();
     }
     _vendorRefNoController.dispose();
+    _cardCodeController.dispose();
+    _cardNameController.dispose();
     _buyerController.dispose();
     _ownerController.dispose();
     _serviceCallController.dispose();
@@ -236,12 +239,11 @@ class _ApDownPaymentRequestScreenState
       title: 'Main Details',
       child: Column(
         children: [
-          _selectionField(
-            label: 'Vendor Ref No',
-            controller: _vendorRefNoController,
-            options: _vendorRefOptions,
-            searchHint: 'Search vendor',
-          ),
+          _vendorCodeField(),
+          const SizedBox(height: 10),
+          _labelField('Card Name', _cardNameController, readOnly: true),
+          const SizedBox(height: 10),
+          _labelField('Vendor Reference Number', _vendorRefNoController),
           const SizedBox(height: 10),
           _selectionField(
             label: 'Buyer',
@@ -262,6 +264,7 @@ class _ApDownPaymentRequestScreenState
             controller: _serviceCallController,
             options: _serviceCallOptions,
             searchHint: 'Search service call',
+            allowNone: true,
           ),
           const SizedBox(height: 10),
           _selectionField(
@@ -269,6 +272,7 @@ class _ApDownPaymentRequestScreenState
             controller: _salesOrderController,
             options: _salesOrderOptions,
             searchHint: 'Search sales order',
+            allowNone: true,
           ),
           const SizedBox(height: 10),
           _dateField('Tour Start Date', _tourStartDateController),
@@ -309,7 +313,14 @@ class _ApDownPaymentRequestScreenState
             hint: 'Select payment type',
           ),
           const SizedBox(height: 10),
-          _labelField('DPM %', _dpmPercentController),
+          _labelField(
+            'DPM %',
+            _dpmPercentController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: <TextInputFormatter>[
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+            ],
+          ),
           const SizedBox(height: 10),
           _labelField('Remarks', _remarksController, maxLines: 3),
           const SizedBox(height: 10),
@@ -458,21 +469,21 @@ class _ApDownPaymentRequestScreenState
           SizedBox(width: 30, child: Text('$rowNo')),
           SizedBox(
             width: 160,
-            child: _tableSelectionField(
+            child: _itemSelectionField(
               controller: item.itemCodeController,
-              options: _itemCodeOptions,
               hintText: 'Item code',
-              searchHint: 'Search item code',
+              searchHint: 'Search item code / item name',
               onSelected: (selected) {
                 setState(() {
-                  item.itemCodeController.text = selected ?? '';
-                  final description = selected == null
-                      ? null
-                      : _itemDescriptionByCode[selected];
+                  item.itemCodeController.text = selected?.code ?? '';
+                  final description = selected?.description;
                   item.descriptionController.text =
                       description != null && description.trim().isNotEmpty
                       ? description
                       : '';
+                  item.warehouseController.text =
+                      _defaultWarehouseLabel() ??
+                      item.warehouseController.text.trim();
                 });
               },
             ),
@@ -480,21 +491,14 @@ class _ApDownPaymentRequestScreenState
           const SizedBox(width: 6),
           SizedBox(
             width: 190,
-            child: _tableSelectionField(
+            child: TextField(
               controller: item.descriptionController,
-              options: _itemDescriptionOptions,
-              hintText: 'Description',
-              searchHint: 'Search description',
-              onSelected: (selected) {
-                setState(() {
-                  item.descriptionController.text = selected ?? '';
-                  final code = selected == null
-                      ? null
-                      : _itemCodeByDescription[selected];
-                  item.itemCodeController.text =
-                      code != null && code.trim().isNotEmpty ? code : '';
-                });
-              },
+              readOnly: true,
+              minLines: 1,
+              maxLines: 2,
+              decoration: inputDecoration.copyWith(
+                hintText: 'Auto-filled from item code',
+              ),
             ),
           ),
           const SizedBox(width: 6),
@@ -681,6 +685,39 @@ class _ApDownPaymentRequestScreenState
     );
   }
 
+  Widget _vendorCodeField() {
+    return TextField(
+      controller: _cardCodeController,
+      readOnly: true,
+      decoration: InputDecoration(
+        labelText: 'Card Code',
+        filled: true,
+        fillColor: const Color(0xFFFBFBFC),
+        suffixIcon: const Icon(Icons.arrow_drop_down),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+        ),
+      ),
+      onTap: () async {
+        final selected = await _openVendorPicker();
+        if (!mounted || selected == null) return;
+        setState(() {
+          _cardCodeController.text = selected.cardCode;
+          _cardNameController.text = selected.cardName;
+        });
+      },
+    );
+  }
+
   Uri _buildNoCacheUri(String path) {
     final uri = Uri.parse('${ApiConstants.baseUrl}$path');
     final params = Map<String, String>.from(uri.queryParameters);
@@ -725,30 +762,26 @@ class _ApDownPaymentRequestScreenState
         throw Exception('Invalid AP down payment BP master response format');
       }
 
-      final options = <String>{};
+      final vendorsByCode = <String, _VendorOption>{};
       for (final row in rows) {
         if (row is! Map<String, dynamic>) continue;
 
         final bpCode = _readValue(row, <String>['BPCode', 'CardCode', 'Code']);
         final bpName = _readValue(row, <String>['BPName', 'CardName', 'Name']);
 
-        String label = '';
-        if (bpCode.isNotEmpty && bpName.isNotEmpty) {
-          label = '$bpCode - $bpName';
-        } else if (bpCode.isNotEmpty) {
-          label = bpCode;
-        } else if (bpName.isNotEmpty) {
-          label = bpName;
-        }
-
-        if (label.trim().isNotEmpty) {
-          options.add(label.trim());
+        if (bpCode.trim().isNotEmpty) {
+          vendorsByCode[bpCode.trim()] = _VendorOption(
+            cardCode: bpCode.trim(),
+            cardName: bpName.trim(),
+          );
         }
       }
 
       if (!mounted) return;
+      final sortedOptions = vendorsByCode.values.toList()
+        ..sort((a, b) => a.displayLabel.compareTo(b.displayLabel));
       setState(() {
-        _vendorRefOptions = options.toList()..sort();
+        _vendorOptions = sortedOptions;
       });
     } catch (_) {
       if (!mounted) return;
@@ -1230,10 +1263,8 @@ class _ApDownPaymentRequestScreenState
         throw Exception('Invalid AP down payment item master response format');
       }
 
-      final codeOptions = <String>{};
-      final descriptionOptions = <String>{};
-      final descriptionByCode = <String, String>{};
-      final codeByDescription = <String, String>{};
+      final itemOptions = <_ItemOption>[];
+      final seenCodes = <String>{};
 
       for (final row in rows) {
         if (row is! Map<String, dynamic>) continue;
@@ -1248,27 +1279,19 @@ class _ApDownPaymentRequestScreenState
         ]);
 
         if (code.trim().isNotEmpty) {
-          codeOptions.add(code.trim());
-        }
-        if (description.trim().isNotEmpty) {
-          descriptionOptions.add(description.trim());
-        }
-        if (code.trim().isNotEmpty && description.trim().isNotEmpty) {
-          descriptionByCode[code.trim()] = description.trim();
-          codeByDescription[description.trim()] = code.trim();
+          final normalizedCode = code.trim().toLowerCase();
+          if (seenCodes.add(normalizedCode)) {
+            itemOptions.add(
+              _ItemOption(code: code.trim(), description: description.trim()),
+            );
+          }
         }
       }
 
       if (!mounted) return;
       setState(() {
-        _itemCodeOptions = codeOptions.toList()..sort();
-        _itemDescriptionOptions = descriptionOptions.toList()..sort();
-        _itemDescriptionByCode = Map<String, String>.unmodifiable(
-          descriptionByCode,
-        );
-        _itemCodeByDescription = Map<String, String>.unmodifiable(
-          codeByDescription,
-        );
+        _itemOptions = (itemOptions.toList()
+          ..sort((a, b) => a.code.toLowerCase().compareTo(b.code.toLowerCase())));
       });
     } catch (_) {
       if (!mounted) return;
@@ -1472,6 +1495,16 @@ class _ApDownPaymentRequestScreenState
         const SnackBar(content: Text('Unable to load warehouse list')),
       );
     }
+  }
+
+  String? _defaultWarehouseLabel() {
+    for (final option in _warehouseOptions) {
+      final normalized = option.trim().toLowerCase();
+      if (normalized.contains('3rd floor warehouse')) {
+        return option;
+      }
+    }
+    return null;
   }
 
   Future<void> _fetchApDownPaymentProjects() async {
@@ -1762,11 +1795,15 @@ class _ApDownPaymentRequestScreenState
     TextEditingController controller, {
     int maxLines = 1,
     bool readOnly = false,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return TextField(
       controller: controller,
       maxLines: maxLines,
       readOnly: readOnly,
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
       decoration: InputDecoration(
         labelText: label,
         filled: true,
@@ -1794,7 +1831,21 @@ class _ApDownPaymentRequestScreenState
       decoration: InputDecoration(
         labelText: label,
         hintText: 'dd/mm/yyyy',
-        suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+        suffixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (controller.text.trim().isNotEmpty)
+              IconButton(
+                tooltip: 'Clear date',
+                onPressed: () {
+                  setState(controller.clear);
+                },
+                icon: const Icon(Icons.close, size: 18),
+              ),
+            const Icon(Icons.calendar_today_outlined, size: 18),
+            const SizedBox(width: 8),
+          ],
+        ),
         filled: true,
         fillColor: const Color(0xFFFBFBFC),
         contentPadding: const EdgeInsets.symmetric(
@@ -1830,6 +1881,7 @@ class _ApDownPaymentRequestScreenState
     required TextEditingController controller,
     required List<String> options,
     required String searchHint,
+    bool allowNone = false,
   }) {
     return TextField(
       controller: controller,
@@ -1854,7 +1906,7 @@ class _ApDownPaymentRequestScreenState
       ),
       onTap: () async {
         final selected = await _openTextPicker(
-          options: _withNoneOption(options),
+          options: allowNone ? _withNoneOption(options) : options,
           searchHint: searchHint,
           emptyText: 'No data found',
         );
@@ -1862,6 +1914,93 @@ class _ApDownPaymentRequestScreenState
         setState(() {
           controller.text = _isNoneOrEmpty(selected) ? '' : selected;
         });
+      },
+    );
+  }
+
+  Future<_VendorOption?> _openVendorPicker() async {
+    return showModalBottomSheet<_VendorOption>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filtered = _vendorOptions
+                .where((option) {
+                  final q = query.trim().toLowerCase();
+                  if (q.isEmpty) return true;
+                  return option.displayLabel.toLowerCase().contains(q) ||
+                      option.cardCode.toLowerCase().contains(q) ||
+                      option.cardName.toLowerCase().contains(q);
+                })
+                .toList(growable: false);
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 12,
+                  bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 12,
+                ),
+                child: SizedBox(
+                  height: 420,
+                  child: Column(
+                    children: [
+                      TextField(
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: 'Search card code / card name',
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          fillColor: const Color(0xFFFBFBFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFD7DCE4),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFD7DCE4),
+                            ),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          setModalState(() => query = value);
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: filtered.isEmpty
+                            ? const Center(child: Text('No vendor found'))
+                            : ListView.separated(
+                                itemCount: filtered.length,
+                                separatorBuilder: (_, __) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final option = filtered[index];
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(option.cardCode),
+                                    subtitle: option.cardName.trim().isEmpty
+                                        ? null
+                                        : Text(option.cardName),
+                                    onTap: () =>
+                                        Navigator.pop(sheetContext, option),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
       },
     );
   }
@@ -1876,7 +2015,7 @@ class _ApDownPaymentRequestScreenState
     return InkWell(
       onTap: () async {
         final selected = await _openTextPicker(
-          options: _withNoneOption(options),
+          options: options,
           searchHint: searchHint,
           emptyText: 'No data found',
         );
@@ -1908,6 +2047,143 @@ class _ApDownPaymentRequestScreenState
     );
   }
 
+  Widget _itemSelectionField({
+    required TextEditingController controller,
+    required String hintText,
+    required String searchHint,
+    required ValueChanged<_ItemOption?> onSelected,
+  }) {
+    return InkWell(
+      onTap: () async {
+        final selected = await _openItemPicker(
+          options: _itemOptions,
+          searchHint: searchHint,
+          emptyText: 'No item found',
+        );
+        if (selected == null) return;
+        onSelected(selected);
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: controller.text.trim().isEmpty ? hintText : null,
+          filled: true,
+          fillColor: const Color(0xFFFBFBFC),
+          suffixIcon: const Icon(Icons.arrow_drop_down),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 10,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+          ),
+        ),
+        child: Text(controller.text),
+      ),
+    );
+  }
+
+  Future<_ItemOption?> _openItemPicker({
+    required List<_ItemOption> options,
+    required String searchHint,
+    required String emptyText,
+  }) async {
+    return showModalBottomSheet<_ItemOption>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filtered = options.where((option) {
+              final q = query.trim().toLowerCase();
+              if (q.isEmpty) return true;
+              return option.code.toLowerCase().contains(q) ||
+                  option.description.toLowerCase().contains(q) ||
+                  option.displayLabel.toLowerCase().contains(q);
+            }).toList();
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 12,
+                  bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 12,
+                ),
+                child: SizedBox(
+                  height: 420,
+                  child: Column(
+                    children: [
+                      TextField(
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: searchHint,
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          fillColor: const Color(0xFFFBFBFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFD7DCE4),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFD7DCE4),
+                            ),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          setModalState(() => query = value);
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: filtered.isEmpty
+                            ? Center(
+                                child: Text(
+                                  emptyText,
+                                  style: const TextStyle(
+                                    color: Color(0xFF6A7685),
+                                  ),
+                                ),
+                              )
+                            : ListView.separated(
+                                itemCount: filtered.length,
+                                separatorBuilder: (_, __) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final option = filtered[index];
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(option.code),
+                                    subtitle: option.description.trim().isEmpty
+                                        ? null
+                                        : Text(option.description),
+                                    onTap: () =>
+                                        Navigator.pop(sheetContext, option),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _dropdownField({
     required String label,
     required String? value,
@@ -1918,7 +2194,7 @@ class _ApDownPaymentRequestScreenState
     return InkWell(
       onTap: () async {
         final selected = await _openTextPicker(
-          options: _withNoneOption(items),
+          options: items,
           searchHint: hint,
           emptyText: 'No data found',
         );
@@ -2061,6 +2337,8 @@ class _ApDownPaymentRequestScreenState
     final now = DateTime.now();
 
     _vendorRefNoController.clear();
+    _cardCodeController.clear();
+    _cardNameController.clear();
     _buyerController.clear();
     _ownerController.clear();
     _serviceCallController.clear();
@@ -2091,10 +2369,9 @@ class _ApDownPaymentRequestScreenState
   String? _validateRequiredFields() {
     final requiredFields = <MapEntry<String, String>>[
       MapEntry('Vendor Ref No', _vendorRefNoController.text),
+      MapEntry('Card Code', _cardCodeController.text),
       MapEntry('Buyer', _buyerController.text),
       MapEntry('Owner', _ownerController.text),
-      MapEntry('Service Call', _serviceCallController.text),
-      MapEntry('Sales Order', _salesOrderController.text),
       MapEntry('Responsible Department', _responsibleDepartment ?? ''),
       MapEntry('Priority', _priority ?? ''),
       MapEntry('Payment Type', _paymentType ?? ''),
@@ -2137,7 +2414,6 @@ class _ApDownPaymentRequestScreenState
         MapEntry('Qty', item.qtyController.text),
         MapEntry('Unit Price', item.unitPriceController.text),
         MapEntry('Discount %', item.discountController.text),
-        MapEntry('Tax Code', item.taxCodeController.text),
         MapEntry('Warehouse', item.warehouseController.text),
         MapEntry('Project', item.projectController.text),
       ];
@@ -2229,11 +2505,9 @@ class _ApDownPaymentRequestScreenState
       'APKUSERID': UserSession.loggedInEmail,
       'Lines': linePayload,
     };
-    _putIfNotBlank(
-      payload,
-      'VendorRefNo',
-      _extractCode(_vendorRefNoController.text),
-    );
+    _putIfNotBlank(payload, 'VendorRefNo', _vendorRefNoController.text);
+    _putIfNotBlank(payload, 'CardCode', _cardCodeController.text.trim());
+    _putIfNotBlank(payload, 'CardName', _cardNameController.text.trim());
     _putIfNotBlank(payload, 'Buyer', _buyerController.text.trim());
     _putIfNotBlank(
       payload,
@@ -2391,4 +2665,24 @@ class _DownPaymentItem {
     warehouseController.dispose();
     projectController.dispose();
   }
+}
+
+class _ItemOption {
+  const _ItemOption({required this.code, required this.description});
+
+  final String code;
+  final String description;
+
+  String get displayLabel =>
+      description.trim().isEmpty ? code : '$code - $description';
+}
+
+class _VendorOption {
+  const _VendorOption({required this.cardCode, required this.cardName});
+
+  final String cardCode;
+  final String cardName;
+
+  String get displayLabel =>
+      cardName.trim().isEmpty ? cardCode : '$cardCode - $cardName';
 }

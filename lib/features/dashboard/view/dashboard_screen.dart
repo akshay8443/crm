@@ -160,7 +160,7 @@
 
 import 'dart:async';
 
-import 'package:crm_app/features/ap_down_payment/view/ap_down_payment_request_screen.dart';
+import 'package:crm_app/features/ap_down_payment/view/ap_down_payment_options_screen.dart';
 import 'package:crm_app/features/inventory_transfer/view/inventory_transfer_request_screen.dart';
 import 'package:crm_app/features/purchase_request/view/purchase_request_options_screen.dart';
 import 'package:flutter/material.dart';
@@ -389,7 +389,7 @@ class _SideMenu extends StatelessWidget {
             onTap: (navigator) {
               navigator.push(
                 MaterialPageRoute(
-                  builder: (_) => const ApDownPaymentRequestScreen(),
+                  builder: (_) => const ApDownPaymentOptionsScreen(),
                 ),
               );
             },

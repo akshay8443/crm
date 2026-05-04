@@ -12,9 +12,14 @@ import '../../../core/session/user_session.dart';
 import 'purchase_request_static_data.dart';
 
 class PurchaseRequestScreen extends StatefulWidget {
-  const PurchaseRequestScreen({super.key, this.initialDocNo});
+  const PurchaseRequestScreen({
+    super.key,
+    this.initialDocNo,
+    this.initialHeaderData,
+  });
 
   final String? initialDocNo;
+  final PurchaseRequestHeaderData? initialHeaderData;
 
   @override
   State<PurchaseRequestScreen> createState() => _PurchaseRequestScreenState();
@@ -24,6 +29,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
   static const int _attachmentImageQuality = 70;
   static const double _attachmentMaxWidth = 1920;
   static const double _attachmentMaxHeight = 1920;
+  static const String _noneOption = 'None';
 
   final ImagePicker _imagePicker = ImagePicker();
   final List<_PurchaseItem> items = [_PurchaseItem()];
@@ -62,6 +68,28 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
   List<_SalesOrderOption> _salesOrderOptions = const [];
   List<_ServiceCallOption> _serviceCallOptions = const [];
   bool _isSubmitting = false;
+  bool _isLoadingExistingRequest = false;
+
+  bool get _isViewDetailsMode {
+    final initialDocNo = widget.initialDocNo?.trim() ?? '';
+    return initialDocNo.isNotEmpty;
+  }
+
+  List<String> _withNoneOption(List<String> options) {
+    final normalized = options
+        .where((option) => option.trim().isNotEmpty)
+        .where(
+          (option) => option.trim().toLowerCase() != _noneOption.toLowerCase(),
+        )
+        .toList(growable: false);
+    return <String>[_noneOption, ...normalized];
+  }
+
+  bool _isNoneOrEmpty(String? value) {
+    final normalized = value?.trim() ?? '';
+    return normalized.isEmpty ||
+        normalized.toLowerCase() == _noneOption.toLowerCase();
+  }
 
   @override
   void initState() {
@@ -72,9 +100,11 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     final initialDocNo = widget.initialDocNo?.trim() ?? '';
     if (initialDocNo.isNotEmpty) {
       _docNoController.text = initialDocNo;
+      _fetchPurchaseRequestDetails(initialDocNo);
     } else {
       _fetchNextPurchaseRequestNo();
     }
+    _applyInitialHeaderData(widget.initialHeaderData);
     _fetchPurchaseEmployees();
     _fetchPurchaseItems();
     _fetchPurchaseWarehouses();
@@ -110,6 +140,16 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     final uri = Uri.parse('${ApiConstants.baseUrl}$path');
     final params = Map<String, String>.from(uri.queryParameters);
     params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
+    return uri.replace(queryParameters: params);
+  }
+
+  Uri _buildNoCacheUriWithQuery(String path, Map<String, String> query) {
+    final uri = Uri.parse('${ApiConstants.baseUrl}$path');
+    final params = <String, String>{
+      ...uri.queryParameters,
+      ...query,
+      '_ts': DateTime.now().millisecondsSinceEpoch.toString(),
+    };
     return uri.replace(queryParameters: params);
   }
 
@@ -497,6 +537,13 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
           'CustomerName',
           'Name',
         ]);
+        final projectCode = _readValue(row, <String>[
+          'ProjectCode',
+          'Projectcode',
+          'PrjCode',
+          'Project',
+          'ProjectNo',
+        ]);
         final soDate = _readValue(row, <String>[
           'SODate',
           'SoDate',
@@ -515,6 +562,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
             soNo: soNo,
             customer: customer,
             soDate: formattedSoDate,
+            projectCode: projectCode,
           ),
         );
       }
@@ -588,6 +636,13 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
             'Date',
           ]),
         );
+        final projectCode = _readValue(row, <String>[
+          'ProjectCode',
+          'Projectcode',
+          'PrjCode',
+          'Project',
+          'ProjectNo',
+        ]);
         if (serviceCallNo.isEmpty) continue;
         final key =
             '${serviceCallNo.toLowerCase()}|${businessPartner.toLowerCase()}|${serviceCallDate.toLowerCase()}';
@@ -598,6 +653,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
             serviceCallNo: serviceCallNo,
             businessPartner: businessPartner,
             serviceCallDate: serviceCallDate,
+            projectCode: projectCode,
           ),
         );
       }
@@ -611,6 +667,74 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Unable to load service call list')),
       );
+    }
+  }
+
+  Future<void> _fetchPurchaseRequestDetails(String docNo) async {
+    final normalizedDocNo = docNo.trim();
+    if (normalizedDocNo.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingExistingRequest = true;
+    });
+
+    try {
+      final uri = _buildNoCacheUriWithQuery(
+        ApiConstants.getSpecificPurchaseRequestPath,
+        <String, String>{'DocNo': normalizedDocNo},
+      );
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 25));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'Get specific purchase request failed (${response.statusCode})',
+        );
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from purchase request details API');
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid purchase request detail response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid purchase request detail response format');
+      }
+
+      final detailRows = rows.whereType<Map<String, dynamic>>().toList();
+      if (detailRows.isEmpty) {
+        throw Exception('Purchase request detail not found');
+      }
+      final normalizedRows = _normalizedPurchaseRequestDetailRows(detailRows);
+
+      if (!mounted) return;
+      setState(() {
+        _applyPurchaseRequestDetails(normalizedRows);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to load purchase request details'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingExistingRequest = false;
+        });
+      }
     }
   }
 
@@ -680,6 +804,16 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     }
     if (!mounted) return;
 
+    final options = <_SalesOrderOption>[
+      const _SalesOrderOption(
+        soNo: _noneOption,
+        customer: '',
+        soDate: '',
+        projectCode: '',
+      ),
+      ..._salesOrderOptions,
+    ];
+
     final selected = await showModalBottomSheet<_SalesOrderOption>(
       context: context,
       isScrollControlled: true,
@@ -687,7 +821,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
         var query = '';
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final filtered = _salesOrderOptions.where((option) {
+            final filtered = options.where((option) {
               final q = query.trim().toLowerCase();
               if (q.isEmpty) return true;
               return option.soNo.toLowerCase().contains(q) ||
@@ -738,17 +872,22 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
                                     const Divider(height: 1),
                                 itemBuilder: (context, index) {
                                   final option = filtered[index];
+                                  final isNoneOption =
+                                      option.soNo.trim().toLowerCase() ==
+                                      _noneOption.toLowerCase();
                                   return ListTile(
                                     dense: true,
                                     title: Text(option.soNo),
-                                    subtitle: Text(
-                                      [
-                                        if (option.customer.isNotEmpty)
-                                          option.customer,
-                                        if (option.soDate.isNotEmpty)
-                                          'Date: ${option.soDate}',
-                                      ].join(' • '),
-                                    ),
+                                    subtitle: isNoneOption
+                                        ? null
+                                        : Text(
+                                            [
+                                              if (option.customer.isNotEmpty)
+                                                option.customer,
+                                              if (option.soDate.isNotEmpty)
+                                                'Date: ${option.soDate}',
+                                            ].join(' • '),
+                                          ),
                                     onTap: () =>
                                         Navigator.pop(sheetContext, option),
                                   );
@@ -767,7 +906,9 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
 
     if (!mounted || selected == null) return;
     setState(() {
-      _salesOrderController.text = selected.displayLabel;
+      _salesOrderController.text = _isNoneOrEmpty(selected.soNo)
+          ? ''
+          : selected.displayLabel;
     });
   }
 
@@ -778,14 +919,24 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     if (!mounted) return;
 
     final selected = await _openServiceCallPickerBottomSheet(
-      options: _serviceCallOptions,
+      options: <_ServiceCallOption>[
+        const _ServiceCallOption(
+          serviceCallNo: _noneOption,
+          businessPartner: '',
+          serviceCallDate: '',
+          projectCode: '',
+        ),
+        ..._serviceCallOptions,
+      ],
       searchHint: 'Search ServiceCallNo / BusinessPartner / Date',
       emptyText: 'No service call found',
     );
     if (!mounted || selected == null) return;
 
     setState(() {
-      _serviceCallController.text = selected.displayLabel;
+      _serviceCallController.text = _isNoneOrEmpty(selected.serviceCallNo)
+          ? ''
+          : selected.displayLabel;
     });
   }
 
@@ -852,17 +1003,26 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
                                     const Divider(height: 1),
                                 itemBuilder: (context, index) {
                                   final option = filtered[index];
+                                  final isNoneOption =
+                                      option.serviceCallNo
+                                          .trim()
+                                          .toLowerCase() ==
+                                      _noneOption.toLowerCase();
                                   return ListTile(
                                     dense: true,
                                     title: Text(option.serviceCallNo),
-                                    subtitle: Text(
-                                      [
-                                        if (option.businessPartner.isNotEmpty)
-                                          option.businessPartner,
-                                        if (option.serviceCallDate.isNotEmpty)
-                                          'Date: ${option.serviceCallDate}',
-                                      ].join(' • '),
-                                    ),
+                                    subtitle: isNoneOption
+                                        ? null
+                                        : Text(
+                                            [
+                                              if (option
+                                                  .businessPartner.isNotEmpty)
+                                                option.businessPartner,
+                                              if (option
+                                                  .serviceCallDate.isNotEmpty)
+                                                'Date: ${option.serviceCallDate}',
+                                            ].join(' • '),
+                                          ),
                                     onTap: () =>
                                         Navigator.pop(sheetContext, option),
                                   );
@@ -975,6 +1135,163 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     return '';
   }
 
+  void _applyInitialHeaderData(PurchaseRequestHeaderData? data) {
+    if (data == null) {
+      return;
+    }
+
+    if ((data.docDate ?? '').trim().isNotEmpty) {
+      _docDateController.text = data.docDate!.trim();
+    }
+    if ((data.requester ?? '').trim().isNotEmpty) {
+      _requesterName = data.requester!.trim();
+      _requesterNameController.text = data.requester!.trim();
+    }
+    if ((data.priority ?? '').trim().isNotEmpty) {
+      _priority = data.priority!.trim().toUpperCase();
+    }
+    if ((data.department ?? '').trim().isNotEmpty) {
+      _responsibleDepartment = data.department!.trim();
+    }
+    if ((data.remarks ?? '').trim().isNotEmpty) {
+      _remarksController.text = data.remarks!.trim();
+    }
+  }
+
+  void _applyPurchaseRequestDetails(List<Map<String, dynamic>> rows) {
+    if (rows.isEmpty) {
+      return;
+    }
+
+    final header = rows.first;
+    _docNoController.text = _readValue(header, <String>['DocNo']);
+
+    _docDateController.text = _formatDisplayDate(
+      _readValue(header, <String>['DocDate']),
+    );
+    _requiredDateController.text = _formatDisplayDate(
+      _readValue(header, <String>['RequiredDate']),
+    );
+    _validUntilController.text = _formatDisplayDate(
+      _readValue(header, <String>['ValidUntil']),
+    );
+    _amendmentDateController.text = _formatDisplayDate(
+      _readValue(header, <String>['AmendmentDate']),
+    );
+
+    _requesterName = _readValue(header, <String>['Requester']);
+    _requesterNameController.text = _requesterName ?? '';
+
+    _ownerName = _readValue(header, <String>['Owner']);
+    _ownerNameController.text = _ownerName ?? '';
+
+    _requisitionToDepartment = _readValue(header, <String>[
+      'ReqToDept',
+      'RequisitionToDepartment',
+    ]);
+    _reqDepartmentController.text = _requisitionToDepartment ?? '';
+
+    _requisitionTo = _readValue(header, <String>['ReqTo']);
+    _reqToController.text = _requisitionTo ?? '';
+
+    _requirementType = _readValue(header, <String>[
+      'RequirementType',
+    ]).toUpperCase();
+    _explanationController.text = _readValue(header, <String>[
+      'ReplacementExplanation',
+    ]);
+
+    final serviceCallNo = _readValue(header, <String>['ServiceCallNo']);
+    final salesOrderNo = _readValue(header, <String>['SalesOrderNo']);
+    _serviceCallController.text = serviceCallNo;
+    _salesOrderController.text = salesOrderNo;
+
+    _responsibleDepartment = _readValue(header, <String>[
+      'ResponsibleDept',
+      'Department',
+    ]);
+    _priority = _readValue(header, <String>['Priority']).toUpperCase();
+    _natureOfProcurement = _readValue(header, <String>[
+      'NatureOfProcurement',
+    ]);
+    _privateClient = _readValue(header, <String>['PrivateClient']).toUpperCase();
+
+    _shipToController.text = _readValue(header, <String>['ShipTo']);
+    _remarksController.text = _readValue(header, <String>['Remarks']);
+    _importantNoteController.text = _readValue(header, <String>[
+      'ImportantNote',
+    ]);
+
+    for (final item in items) {
+      item.dispose();
+    }
+    items
+      ..clear()
+      ..addAll(
+        rows.map((row) {
+          final item = _PurchaseItem();
+          final itemCode = _readValue(row, <String>['ItemCode']);
+          final warehouse = _readValue(row, <String>['Warehouse']);
+          final projectCode = _readValue(row, <String>['ProjectCode']);
+          final qty = _readValue(row, <String>['Qty']);
+
+          item.itemCode = itemCode;
+          item.warehouse = warehouse;
+          item.projectCode = projectCode;
+          item.itemCodeController.text = itemCode;
+          item.descriptionController.text = _readValue(row, <String>[
+            'ItemDescription',
+          ]);
+          item.detailsController.text = _readValue(row, <String>[
+            'ItemDetails',
+          ]);
+          item.qtyController.text = qty;
+          item.warehouseCodeController.text = warehouse;
+          item.projectCodeController.text = projectCode;
+          return item;
+        }),
+      );
+
+    if (items.isEmpty) {
+      items.add(_PurchaseItem());
+    }
+  }
+
+  List<Map<String, dynamic>> _normalizedPurchaseRequestDetailRows(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final seen = <String>{};
+    final normalized = <Map<String, dynamic>>[];
+
+    for (final row in rows) {
+      final lineIdentity = _readValue(row, const <String>[
+        'LineNum',
+        'LineNo',
+        'RowNo',
+        'VisOrder',
+      ]);
+
+      final fallbackIdentity = <String>[
+        _readValue(row, const <String>['ItemCode']).toLowerCase(),
+        _readValue(row, const <String>['ItemDescription']).toLowerCase(),
+        _readValue(row, const <String>['ItemDetails']).toLowerCase(),
+        _readValue(row, const <String>['Qty']).toLowerCase(),
+        _readValue(row, const <String>['Warehouse']).toLowerCase(),
+        _readValue(row, const <String>['ProjectCode']).toLowerCase(),
+      ].join('|');
+
+      final dedupeKey = lineIdentity.isNotEmpty
+          ? 'line:${lineIdentity.toLowerCase()}'
+          : 'fallback:$fallbackIdentity';
+
+      if (seen.add(dedupeKey)) {
+        normalized.add(row);
+      }
+    }
+
+    return normalized;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -992,47 +1309,51 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
             color: Colors.white,
           ),
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: OutlinedButton(
-              onPressed: () => Navigator.maybePop(context),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                backgroundColor: Colors.white.withValues(alpha: 0.12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text('Cancel'),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.only(right: 8, top: 10, bottom: 10),
-            child: FilledButton(
-              onPressed: _isSubmitting ? null : _validateAndSubmit,
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF1E69F2),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: _isSubmitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+        actions: _isViewDetailsMode
+            ? null
+            : [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.maybePop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.2),
                       ),
-                    )
-                  : const Text('Save & Submit'),
-            ),
-          ),
-        ],
+                      backgroundColor: Colors.white.withValues(alpha: 0.12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8, top: 10, bottom: 10),
+                  child: FilledButton(
+                    onPressed: _isSubmitting ? null : _validateAndSubmit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E69F2),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Save & Submit'),
+                  ),
+                ),
+              ],
       ),
       body: SafeArea(
         top: false,
@@ -1049,6 +1370,10 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
               ),
               child: Column(
                 children: [
+                  if (_isLoadingExistingRequest) ...[
+                    const LinearProgressIndicator(minHeight: 3),
+                    const SizedBox(height: 12),
+                  ],
                   if (isMobile) ...[
                     _buildRequesterDetailsCard(),
                     const SizedBox(height: 12),
@@ -1091,9 +1416,6 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     if (_reqToController.text.trim().isEmpty) {
       errors.add('Requisition To is required');
     }
-    if (_serviceCallController.text.trim().isEmpty) {
-      errors.add('Service Call is required');
-    }
     if ((_responsibleDepartment ?? '').trim().isEmpty) {
       errors.add('Department is required');
     }
@@ -1121,6 +1443,39 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       if (row.projectCodeController.text.trim().isEmpty) {
         errors.add('Row $rowNo: Project required');
       }
+    }
+
+    final selectedProjectCodes = items
+        .map((row) => row.projectCodeController.text.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+
+    final hasMatchingServiceCall = selectedProjectCodes.any(
+      (projectCode) => _serviceCallOptions.any(
+        (option) =>
+            option.projectCode.trim().isNotEmpty &&
+            option.projectCode.trim().toLowerCase() ==
+                projectCode.toLowerCase(),
+      ),
+    );
+    if (hasMatchingServiceCall && _serviceCallController.text.trim().isEmpty) {
+      errors.add(
+        'Service Call is required when a matching service call exists for the selected project',
+      );
+    }
+
+    final hasMatchingSalesOrder = selectedProjectCodes.any(
+      (projectCode) => _salesOrderOptions.any(
+        (option) =>
+            option.projectCode.trim().isNotEmpty &&
+            option.projectCode.trim().toLowerCase() ==
+                projectCode.toLowerCase(),
+      ),
+    );
+    if (hasMatchingSalesOrder && _salesOrderController.text.trim().isEmpty) {
+      errors.add(
+        'Sales Order is required when a matching sales order exists for the selected project',
+      );
     }
 
     if (errors.isNotEmpty) {
@@ -1896,7 +2251,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       title: 'Attachments',
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: _openUploadOptions,
+        onTap: _isViewDetailsMode ? null : _openUploadOptions,
         child: Container(
           width: double.infinity,
           constraints: const BoxConstraints(minHeight: 130),
@@ -1913,18 +2268,24 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Take Photo / Choose From Gallery',
+                Text(
+                  _isViewDetailsMode
+                      ? 'Attachments are view only'
+                      : 'Take Photo / Choose From Gallery',
                   style: TextStyle(
                     color: Color(0xFF6A7685),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Click here to upload files',
+                Text(
+                  _isViewDetailsMode
+                      ? 'Upload is disabled in view details'
+                      : 'Click here to upload files',
                   style: TextStyle(
-                    color: Color(0xFF2D66C6),
+                    color: _isViewDetailsMode
+                        ? const Color(0xFF6A7685)
+                        : const Color(0xFF2D66C6),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1961,25 +2322,27 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
                               Positioned(
                                 top: 4,
                                 right: 4,
-                                child: InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      _attachments.removeAt(index);
-                                    });
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.black54,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.close,
-                                      size: 14,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
+                                child: _isViewDetailsMode
+                                    ? const SizedBox.shrink()
+                                    : InkWell(
+                                        onTap: () {
+                                          setState(() {
+                                            _attachments.removeAt(index);
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(2),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.black54,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.close,
+                                            size: 14,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
                               ),
                             ],
                           ),
@@ -2035,6 +2398,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       color: const Color(0xFF2A3038),
       fontSize: isMobile ? 12 : 14,
     );
+    final isReadOnly = _isViewDetailsMode;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -2053,15 +2417,18 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
               style: rowTextStyle,
               decoration: _itemInputDecoration(
                 hintText: 'Search ItemCode',
-                suffixIcon: const Icon(Icons.arrow_drop_down),
+                suffixIcon: isReadOnly
+                    ? null
+                    : const Icon(Icons.arrow_drop_down),
               ),
-              onTap: () => _openItemPicker(item),
+              onTap: isReadOnly ? null : () => _openItemPicker(item),
             ),
           ),
           SizedBox(
             width: 330,
             child: TextField(
               controller: item.descriptionController,
+              readOnly: true,
               style: rowTextStyle,
               decoration: _itemInputDecoration(),
             ),
@@ -2070,6 +2437,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
             width: 300,
             child: TextField(
               controller: item.detailsController,
+              readOnly: isReadOnly,
               style: rowTextStyle,
               decoration: _itemInputDecoration(),
             ),
@@ -2078,6 +2446,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
             width: 170,
             child: TextField(
               controller: item.qtyController,
+              readOnly: isReadOnly,
               keyboardType: TextInputType.number,
               style: rowTextStyle,
               decoration: _itemInputDecoration(),
@@ -2091,9 +2460,11 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
               style: rowTextStyle,
               decoration: _itemInputDecoration(
                 hintText: 'Search Warehouse',
-                suffixIcon: const Icon(Icons.arrow_drop_down),
+                suffixIcon: isReadOnly
+                    ? null
+                    : const Icon(Icons.arrow_drop_down),
               ),
-              onTap: () => _openWarehousePicker(item),
+              onTap: isReadOnly ? null : () => _openWarehousePicker(item),
             ),
           ),
           SizedBox(
@@ -2104,30 +2475,38 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
               style: rowTextStyle,
               decoration: _itemInputDecoration(
                 hintText: 'Search Project',
-                suffixIcon: const Icon(Icons.arrow_drop_down),
+                suffixIcon: isReadOnly
+                    ? null
+                    : const Icon(Icons.arrow_drop_down),
               ),
-              onTap: () => _openProjectPicker(item),
+              onTap: isReadOnly ? null : () => _openProjectPicker(item),
             ),
           ),
           SizedBox(
             width: 90,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                InkWell(
-                  onTap: _addItemRow,
-                  child: const Icon(
-                    Icons.add_circle_outline,
-                    color: Colors.green,
-                    size: 24,
+            child: isReadOnly
+                ? const SizedBox.shrink()
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      InkWell(
+                        onTap: _addItemRow,
+                        child: const Icon(
+                          Icons.add_circle_outline,
+                          color: Colors.green,
+                          size: 24,
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () => _removeItemRow(item),
+                        child: const Icon(
+                          Icons.remove,
+                          color: Colors.red,
+                          size: 24,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                InkWell(
-                  onTap: () => _removeItemRow(item),
-                  child: const Icon(Icons.remove, color: Colors.red, size: 24),
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -2235,7 +2614,21 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       decoration: InputDecoration(
         labelText: label,
         hintText: 'dd/mm/yyyy',
-        suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+        suffixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (controller.text.trim().isNotEmpty)
+              IconButton(
+                tooltip: 'Clear date',
+                onPressed: () {
+                  setState(controller.clear);
+                },
+                icon: const Icon(Icons.close, size: 18),
+              ),
+            const Icon(Icons.calendar_today_outlined, size: 18),
+            const SizedBox(width: 8),
+          ],
+        ),
         filled: true,
         fillColor: const Color(0xFFFBFBFC),
         contentPadding: const EdgeInsets.symmetric(
@@ -2252,10 +2645,14 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
         ),
       ),
       onTap: () async {
+        final initialDate = _parsePurchaseDate(controller.text.trim());
         final now = DateTime.now();
+        final pickerInitialDate = initialDate == null || initialDate.year < 2020
+            ? now
+            : initialDate;
         final picked = await showDatePicker(
           context: context,
-          initialDate: now,
+          initialDate: pickerInitialDate,
           firstDate: DateTime(2020),
           lastDate: DateTime(2100),
         );
@@ -2270,22 +2667,37 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     );
   }
 
+  DateTime? _parsePurchaseDate(String value) {
+    final text = value.trim();
+    final slashMatch = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(text);
+    if (slashMatch != null) {
+      final day = int.tryParse(slashMatch.group(1)!);
+      final month = int.tryParse(slashMatch.group(2)!);
+      final year = int.tryParse(slashMatch.group(3)!);
+      if (day != null && month != null && year != null) {
+        return DateTime(year, month, day);
+      }
+    }
+    return DateTime.tryParse(text);
+  }
+
   Widget _dropdownField({
     required String label,
     required String? value,
     required List<String> items,
     required ValueChanged<String?> onChanged,
     required String hint,
+    bool allowNone = false,
   }) {
     return InkWell(
       onTap: () async {
         final selected = await _openTextPicker(
-          options: items,
+          options: allowNone ? _withNoneOption(items) : items,
           searchHint: hint,
           emptyText: 'No data found',
         );
         if (selected == null) return;
-        onChanged(selected);
+        onChanged(_isNoneOrEmpty(selected) ? null : selected);
       },
       child: InputDecorator(
         decoration: InputDecoration(
@@ -2430,11 +2842,13 @@ class _SalesOrderOption {
     required this.soNo,
     required this.customer,
     required this.soDate,
+    required this.projectCode,
   });
 
   final String soNo;
   final String customer;
   final String soDate;
+  final String projectCode;
 
   String get displayLabel {
     final parts = <String>[soNo];
@@ -2453,11 +2867,13 @@ class _ServiceCallOption {
     required this.serviceCallNo,
     required this.businessPartner,
     required this.serviceCallDate,
+    required this.projectCode,
   });
 
   final String serviceCallNo;
   final String businessPartner;
   final String serviceCallDate;
+  final String projectCode;
 
   String get displayLabel {
     final parts = <String>[serviceCallNo];
@@ -2469,4 +2885,20 @@ class _ServiceCallOption {
     }
     return parts.join(' - ');
   }
+}
+
+class PurchaseRequestHeaderData {
+  const PurchaseRequestHeaderData({
+    this.docDate,
+    this.requester,
+    this.priority,
+    this.department,
+    this.remarks,
+  });
+
+  final String? docDate;
+  final String? requester;
+  final String? priority;
+  final String? department;
+  final String? remarks;
 }

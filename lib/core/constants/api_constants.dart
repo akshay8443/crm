@@ -23,6 +23,8 @@ class ApiConstants {
   static const String getNextServiceNoPath = '/api/GetNextServiceNo';
   static const String getAllServiceCallPath = '/api/GetAllserviceCall';
   static const String getAllPurchaseRequestPath = '/api/GetAllPurchaseRequest';
+  static const String getSpecificPurchaseRequestPath =
+      '/GetSpecificPurchaseRequest';
   static const String getApDownBpMasterPath = '/api/GetAPdownBPMaster';
   static const String getApDownBuyerMasterPath = '/api/GetAPdownBuyerMaster';
   static const String getApDownOwnerMasterPath = '/api/APdownOwnerMaster';

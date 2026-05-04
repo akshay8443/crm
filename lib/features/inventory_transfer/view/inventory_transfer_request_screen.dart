@@ -24,14 +24,16 @@ class _InventoryTransferRequestScreenState
       TextEditingController();
   final TextEditingController _employeeCodeController = TextEditingController();
   final TextEditingController _teamController = TextEditingController();
-  final TextEditingController _importantNoteController = TextEditingController();
+  final TextEditingController _importantNoteController =
+      TextEditingController();
   final TextEditingController _remarksController = TextEditingController();
 
   final TextEditingController _documentNoController = TextEditingController();
   final TextEditingController _postingDateController = TextEditingController();
   final TextEditingController _dueDateController = TextEditingController();
   final TextEditingController _documentDateController = TextEditingController();
-  final TextEditingController _opportunityNoController = TextEditingController();
+  final TextEditingController _opportunityNoController =
+      TextEditingController();
   final TextEditingController _connectedTransferNoController =
       TextEditingController();
 
@@ -41,10 +43,11 @@ class _InventoryTransferRequestScreenState
   final TextEditingController _expectedReturnDateController =
       TextEditingController();
   final TextEditingController _salesOrderNoController = TextEditingController();
-  final TextEditingController _serviceCallNoController = TextEditingController();
+  final TextEditingController _serviceCallNoController =
+      TextEditingController();
 
   String? _businessPartner;
-  String _transferType = 'Issue';
+  String? _transferType;
   String _status = 'Open';
   String? _fromWarehouse;
   String? _toWarehouse;
@@ -56,10 +59,7 @@ class _InventoryTransferRequestScreenState
   bool _isSubmitting = false;
 
   List<String> _businessPartnerOptions = const <String>[];
-  final List<String> _transferTypeOptions = <String>[
-    'Issue',
-    'Receive',
-  ];
+  final List<String> _transferTypeOptions = <String>['Issue', 'Receive'];
   final List<String> _statusOptions = <String>['Open', 'Closed', 'Pending'];
   final List<String> _departmentOptions = <String>[
     'Engineering',
@@ -86,8 +86,8 @@ class _InventoryTransferRequestScreenState
   Map<String, String> _serviceCallLabelsById = const <String, String>{};
   List<_EmployeeOption> _employeeOptions = const <_EmployeeOption>[];
   Map<String, String> _employeeLabelsByCode = const <String, String>{};
-  List<_OpportunityOption> _opportunityOptions =
-      const <_OpportunityOption>[];
+  Map<String, String> _employeeTeamsByCode = const <String, String>{};
+  List<_OpportunityOption> _opportunityOptions = const <_OpportunityOption>[];
   Map<String, String> _opportunityLabelsByNo = const <String, String>{};
   List<_ConnectedTransferOption> _connectedTransferOptions =
       const <_ConnectedTransferOption>[];
@@ -97,7 +97,9 @@ class _InventoryTransferRequestScreenState
   List<_ProjectOption> _projectOptions = const <_ProjectOption>[];
   Map<String, String> _projectLabelsByCode = const <String, String>{};
 
-  final List<_InventoryItemRow> _items = <_InventoryItemRow>[_InventoryItemRow()];
+  final List<_InventoryItemRow> _items = <_InventoryItemRow>[
+    _InventoryItemRow(),
+  ];
 
   @override
   void initState() {
@@ -105,7 +107,6 @@ class _InventoryTransferRequestScreenState
     final now = DateTime.now();
     _documentDateController.text = _formatDate(now);
     _postingDateController.text = _formatDate(now);
-    _status = 'Open';
     _fetchNextInventoryTransferNumber();
     _fetchBusinessPartners();
     _fetchWarehouses();
@@ -216,7 +217,9 @@ class _InventoryTransferRequestScreenState
   List<String> _withNoneStringOption(List<String> options) {
     final normalized = options
         .where((option) => option.trim().isNotEmpty)
-        .where((option) => option.trim().toLowerCase() != _noneOption.toLowerCase())
+        .where(
+          (option) => option.trim().toLowerCase() != _noneOption.toLowerCase(),
+        )
         .toList(growable: false);
     return <String>[_noneOption, ...normalized];
   }
@@ -225,7 +228,8 @@ class _InventoryTransferRequestScreenState
     return <_PickerOption>[
       const _PickerOption(value: _noneOption, label: _noneOption),
       ...options.where(
-        (option) => option.value.trim().toLowerCase() != _noneOption.toLowerCase(),
+        (option) =>
+            option.value.trim().toLowerCase() != _noneOption.toLowerCase(),
       ),
     ];
   }
@@ -285,15 +289,12 @@ class _InventoryTransferRequestScreenState
           continue;
         }
 
-        nextNumber = _readValue(
-          row,
-          <String>[
-            'InventorytransferReqNo',
-            'InventoryTransferReqNo',
-            'InventoryTransferNumber',
-            'DocNum',
-          ],
-        );
+        nextNumber = _readValue(row, <String>[
+          'InventorytransferReqNo',
+          'InventoryTransferReqNo',
+          'InventoryTransferNumber',
+          'DocNum',
+        ]);
         if (nextNumber.isNotEmpty) {
           break;
         }
@@ -309,9 +310,7 @@ class _InventoryTransferRequestScreenState
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Unable to load document number'),
-        ),
+        const SnackBar(content: Text('Unable to load document number')),
       );
     }
   }
@@ -386,9 +385,7 @@ class _InventoryTransferRequestScreenState
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Unable to load business partner list'),
-        ),
+        const SnackBar(content: Text('Unable to load business partner list')),
       );
     }
   }
@@ -439,11 +436,7 @@ class _InventoryTransferRequestScreenState
           'WhsName',
           'Name',
         ]);
-        final location = _readValue(row, <String>[
-          'Location',
-          'Loc',
-          'Branch',
-        ]);
+        final location = _readValue(row, <String>['Location', 'Loc', 'Branch']);
 
         if (code.isEmpty) {
           continue;
@@ -704,6 +697,7 @@ class _InventoryTransferRequestScreenState
       }
 
       final optionsByCode = <String, _EmployeeOption>{};
+      final teamsByCode = <String, String>{};
       for (final row in rows) {
         if (row is! Map<String, dynamic>) {
           continue;
@@ -735,11 +729,22 @@ class _InventoryTransferRequestScreenState
         if (fullNameParts.isNotEmpty) {
           label = '$employeeCode - ${fullNameParts.join(' ')}';
         }
+        final team = _readValue(row, <String>[
+          'Team',
+          'TeamName',
+          'TeamCode',
+          'GroupName',
+          'Department',
+          'DeptName',
+        ]);
 
         optionsByCode[employeeCode] = _EmployeeOption(
           code: employeeCode,
           label: label,
         );
+        if (team.isNotEmpty) {
+          teamsByCode[employeeCode] = team;
+        }
       }
 
       if (!mounted) {
@@ -755,10 +760,12 @@ class _InventoryTransferRequestScreenState
             (key, value) => MapEntry<String, String>(key, value.label),
           ),
         );
+        _employeeTeamsByCode = Map<String, String>.unmodifiable(teamsByCode);
         if (_employeeCode != null &&
             !_employeeOptions.any((option) => option.code == _employeeCode)) {
           _employeeCode = null;
           _employeeCodeController.text = '';
+          _teamController.clear();
         }
       });
     } catch (_) {
@@ -919,10 +926,7 @@ class _InventoryTransferRequestScreenState
           'VendorName',
           'CardName',
         ]);
-        final transferType = _readValue(row, <String>[
-          'TransferType',
-          'Type',
-        ]);
+        final transferType = _readValue(row, <String>['TransferType', 'Type']);
 
         if (transferNo.isEmpty) {
           continue;
@@ -1053,9 +1057,9 @@ class _InventoryTransferRequestScreenState
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to load item list')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Unable to load item list')));
     }
   }
 
@@ -1067,7 +1071,9 @@ class _InventoryTransferRequestScreenState
           .timeout(const Duration(seconds: 20));
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('Get inventory project failed (${response.statusCode})');
+        throw Exception(
+          'Get inventory project failed (${response.statusCode})',
+        );
       }
       if (response.body.isEmpty) {
         throw Exception('Empty response from inventory project API');
@@ -1202,29 +1208,28 @@ class _InventoryTransferRequestScreenState
       'DocumentDate': _toApiDate(_documentDateController.text),
       'APKUSERID': UserSession.loggedInEmail,
       'Lines': _items
-          .map(
-            (row) {
-              final line = <String, dynamic>{
-                'Description': row.descriptionController.text.trim(),
-                'SerialNo': row.serialNoController.text.trim(),
-                'Quantity':
-                    double.tryParse(row.quantityController.text.trim()) ?? 0,
-                'CheckedBy': row.checkedByController.text.trim(),
-                'CheckedDate': _toApiDate(row.checkedDateController.text),
-                'NextCheck': _toApiDate(row.nextCheckController.text),
-                'Remarks': row.remarksController.text.trim(),
-              };
-              _putIfNotBlank(line, 'ItemCode', row.itemCodeController.text);
-              _putIfNotBlank(line, 'FromWhs', row.fromWhsController.text);
-              _putIfNotBlank(line, 'ToWhs', row.toWhsController.text);
-              _putIfNotBlank(line, 'Project', row.projectController.text);
-              if (row.previousDateController.text.trim().isNotEmpty) {
-                line['PreviousDate'] =
-                    _toApiDate(row.previousDateController.text);
-              }
-              return line;
-            },
-          )
+          .map((row) {
+            final line = <String, dynamic>{
+              'Description': row.descriptionController.text.trim(),
+              'SerialNo': row.serialNoController.text.trim(),
+              'Quantity':
+                  double.tryParse(row.quantityController.text.trim()) ?? 0,
+              'CheckedBy': row.checkedByController.text.trim(),
+              'CheckedDate': _toApiDate(row.checkedDateController.text),
+              'NextCheck': _toApiDate(row.nextCheckController.text),
+              'Remarks': row.remarksController.text.trim(),
+            };
+            _putIfNotBlank(line, 'ItemCode', row.itemCodeController.text);
+            _putIfNotBlank(line, 'FromWhs', row.fromWhsController.text);
+            _putIfNotBlank(line, 'ToWhs', row.toWhsController.text);
+            _putIfNotBlank(line, 'Project', row.projectController.text);
+            if (row.previousDateController.text.trim().isNotEmpty) {
+              line['PreviousDate'] = _toApiDate(
+                row.previousDateController.text,
+              );
+            }
+            return line;
+          })
           .toList(growable: false),
     };
     _putIfNotBlank(payload, 'TransferType', _transferType);
@@ -1357,7 +1362,10 @@ class _InventoryTransferRequestScreenState
     if (index == 0) {
       return _buildTransferDetailsSection();
     }
-    if (index == 1 || index == 3 || index == 5 || index == _screenChildCount - 1) {
+    if (index == 1 ||
+        index == 3 ||
+        index == 5 ||
+        index == _screenChildCount - 1) {
       return const SizedBox(height: 10);
     }
     if (index == 2) {
@@ -1395,15 +1403,17 @@ class _InventoryTransferRequestScreenState
                   title: 'Business Partner',
                   options: _withNonePickerOption(
                     _businessPartnerOptions
-                      .map(
-                        (option) =>
-                            _PickerOption(value: option, label: option),
-                      )
-                      .toList(growable: false),
+                        .map(
+                          (option) =>
+                              _PickerOption(value: option, label: option),
+                        )
+                        .toList(growable: false),
                   ),
                 );
                 if (selected == null) return;
-                setState(() => _businessPartner = _normalizeSelectedOption(selected));
+                setState(
+                  () => _businessPartner = _normalizeSelectedOption(selected),
+                );
               },
             ),
             _dropdownField(
@@ -1411,7 +1421,7 @@ class _InventoryTransferRequestScreenState
               value: _transferType,
               options: _transferTypeOptions,
               onChanged: (value) {
-                setState(() => _transferType = value ?? '');
+                setState(() => _transferType = value);
               },
             ),
             _warehouseDropdownField(
@@ -1503,12 +1513,12 @@ class _InventoryTransferRequestScreenState
               onChanged: (value) => setState(() {
                 _employeeCode = value;
                 _employeeCodeController.text = value ?? '';
+                _teamController.text = value == null
+                    ? ''
+                    : (_employeeTeamsByCode[value] ?? '');
               }),
             ),
-            _textField(
-              label: 'Team',
-              controller: _teamController,
-            ),
+            _textField(label: 'Team', controller: _teamController),
             _dropdownField(
               label: 'Status',
               value: _status,
@@ -1548,10 +1558,7 @@ class _InventoryTransferRequestScreenState
               label: 'Posting Date',
               controller: _postingDateController,
             ),
-            _dateField(
-              label: 'Due Date',
-              controller: _dueDateController,
-            ),
+            _dateField(label: 'Due Date', controller: _dueDateController),
             _dateField(
               label: 'Document Date',
               controller: _documentDateController,
@@ -1802,21 +1809,22 @@ class _InventoryTransferRequestScreenState
         initialValue: _isNoneOrEmpty(value) ? null : value,
         isExpanded: true,
         items: _withNoneStringOption(options)
-            .map((option) => DropdownMenuItem<String>(
-                  value: option,
-                  child: _dropdownLabel(option),
-                ))
+            .map(
+              (option) => DropdownMenuItem<String>(
+                value: option,
+                child: _dropdownLabel(option),
+              ),
+            )
             .toList(growable: false),
-        onChanged: (selected) => onChanged?.call(
-          selected == _noneOption ? null : selected,
-        ),
+        onChanged: (selected) =>
+            onChanged?.call(selected == _noneOption ? null : selected),
         validator: requiredField
             ? (selected) =>
-                (selected == null ||
-                        selected.isEmpty ||
-                        selected == _noneOption)
-                    ? 'Please select $label'
-                    : null
+                  (selected == null ||
+                      selected.isEmpty ||
+                      selected == _noneOption)
+                  ? 'Please select $label'
+                  : null
             : null,
         decoration: InputDecoration(
           labelText: label,
@@ -1844,11 +1852,11 @@ class _InventoryTransferRequestScreenState
           title: label,
           options: _withNonePickerOption(
             options
-              .map(
-                (option) =>
-                    _PickerOption(value: option.code, label: option.label),
-              )
-              .toList(growable: false),
+                .map(
+                  (option) =>
+                      _PickerOption(value: option.code, label: option.label),
+                )
+                .toList(growable: false),
           ),
         );
         if (selected != null) {
@@ -1863,6 +1871,7 @@ class _InventoryTransferRequestScreenState
     required String? value,
     required List<_SalesOrderOption> options,
     required ValueChanged<String?> onChanged,
+    bool allowNone = true,
   }) {
     return _pickerField(
       label: label,
@@ -1871,14 +1880,25 @@ class _InventoryTransferRequestScreenState
       onTap: () async {
         final selected = await _showOptionPicker(
           title: label,
-          options: _withNonePickerOption(
-            options
-              .map(
-                (option) =>
-                    _PickerOption(value: option.soNo, label: option.label),
-              )
-              .toList(growable: false),
-          ),
+          options: allowNone
+              ? _withNonePickerOption(
+                  options
+                      .map(
+                        (option) => _PickerOption(
+                          value: option.soNo,
+                          label: option.label,
+                        ),
+                      )
+                      .toList(growable: false),
+                )
+              : options
+                    .map(
+                      (option) => _PickerOption(
+                        value: option.soNo,
+                        label: option.label,
+                      ),
+                    )
+                    .toList(growable: false),
         );
         if (selected != null) {
           onChanged(_normalizeSelectedOption(selected));
@@ -1892,6 +1912,7 @@ class _InventoryTransferRequestScreenState
     required String? value,
     required List<_ServiceCallOption> options,
     required ValueChanged<String?> onChanged,
+    bool allowNone = true,
   }) {
     return _pickerField(
       label: label,
@@ -1900,14 +1921,25 @@ class _InventoryTransferRequestScreenState
       onTap: () async {
         final selected = await _showOptionPicker(
           title: label,
-          options: _withNonePickerOption(
-            options
-              .map(
-                (option) =>
-                    _PickerOption(value: option.callId, label: option.label),
-              )
-              .toList(growable: false),
-          ),
+          options: allowNone
+              ? _withNonePickerOption(
+                  options
+                      .map(
+                        (option) => _PickerOption(
+                          value: option.callId,
+                          label: option.label,
+                        ),
+                      )
+                      .toList(growable: false),
+                )
+              : options
+                    .map(
+                      (option) => _PickerOption(
+                        value: option.callId,
+                        label: option.label,
+                      ),
+                    )
+                    .toList(growable: false),
         );
         if (selected != null) {
           onChanged(_normalizeSelectedOption(selected));
@@ -1931,11 +1963,11 @@ class _InventoryTransferRequestScreenState
           title: label,
           options: _withNonePickerOption(
             options
-              .map(
-                (option) =>
-                    _PickerOption(value: option.code, label: option.label),
-              )
-              .toList(growable: false),
+                .map(
+                  (option) =>
+                      _PickerOption(value: option.code, label: option.label),
+                )
+                .toList(growable: false),
           ),
         );
         if (selected != null) {
@@ -1960,13 +1992,13 @@ class _InventoryTransferRequestScreenState
           title: label,
           options: _withNonePickerOption(
             options
-              .map(
-                (option) => _PickerOption(
-                  value: option.opportunityNo,
-                  label: option.label,
-                ),
-              )
-              .toList(growable: false),
+                .map(
+                  (option) => _PickerOption(
+                    value: option.opportunityNo,
+                    label: option.label,
+                  ),
+                )
+                .toList(growable: false),
           ),
         );
         if (selected != null) {
@@ -1991,13 +2023,13 @@ class _InventoryTransferRequestScreenState
           title: label,
           options: _withNonePickerOption(
             options
-              .map(
-                (option) => _PickerOption(
-                  value: option.transferNo,
-                  label: option.label,
-                ),
-              )
-              .toList(growable: false),
+                .map(
+                  (option) => _PickerOption(
+                    value: option.transferNo,
+                    label: option.label,
+                  ),
+                )
+                .toList(growable: false),
           ),
         );
         if (selected != null) {
@@ -2022,14 +2054,14 @@ class _InventoryTransferRequestScreenState
           title: label,
           options: _withNonePickerOption(
             options
-              .map(
-                (option) => _PickerOption(
-                  value: option.itemCode,
-                  label: option.itemCode,
-                  subtitle: option.description,
-                ),
-              )
-              .toList(growable: false),
+                .map(
+                  (option) => _PickerOption(
+                    value: option.itemCode,
+                    label: option.itemCode,
+                    subtitle: option.description,
+                  ),
+                )
+                .toList(growable: false),
           ),
         );
         if (selected != null) {
@@ -2054,13 +2086,13 @@ class _InventoryTransferRequestScreenState
           title: label,
           options: _withNonePickerOption(
             options
-              .map(
-                (option) => _PickerOption(
-                  value: option.projectCode,
-                  label: option.label,
-                ),
-              )
-              .toList(growable: false),
+                .map(
+                  (option) => _PickerOption(
+                    value: option.projectCode,
+                    label: option.label,
+                  ),
+                )
+                .toList(growable: false),
           ),
         );
         if (selected != null) {
@@ -2083,8 +2115,8 @@ class _InventoryTransferRequestScreenState
         initialValue: value,
         validator: requiredField
             ? (selected) => (selected == null || selected.isEmpty)
-                ? 'Please select $label'
-                : null
+                  ? 'Please select $label'
+                  : null
             : null,
         builder: (field) {
           final text = displayText?.trim() ?? '';
@@ -2105,11 +2137,7 @@ class _InventoryTransferRequestScreenState
                 suffixIcon: const Icon(Icons.search),
               ),
               child: hasValue
-                  ? Text(
-                      text,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    )
+                  ? Text(text, maxLines: 1, overflow: TextOverflow.ellipsis)
                   : const SizedBox.shrink(),
             ),
           );
@@ -2129,12 +2157,14 @@ class _InventoryTransferRequestScreenState
         String query = '';
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final filtered = options.where((option) {
-              final searchText =
-                  '${option.label} ${option.subtitle ?? ''} ${option.value}'
-                      .toLowerCase();
-              return searchText.contains(query.toLowerCase());
-            }).toList(growable: false);
+            final filtered = options
+                .where((option) {
+                  final searchText =
+                      '${option.label} ${option.subtitle ?? ''} ${option.value}'
+                          .toLowerCase();
+                  return searchText.contains(query.toLowerCase());
+                })
+                .toList(growable: false);
 
             return SafeArea(
               child: SizedBox(
@@ -2167,7 +2197,8 @@ class _InventoryTransferRequestScreenState
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            subtitle: option.subtitle == null ||
+                            subtitle:
+                                option.subtitle == null ||
                                     option.subtitle!.trim().isEmpty
                                 ? null
                                 : Text(
@@ -2213,7 +2244,21 @@ class _InventoryTransferRequestScreenState
         decoration: InputDecoration(
           labelText: label,
           hintText: 'dd/mm/yyyy',
-          suffixIcon: const Icon(Icons.calendar_today_outlined),
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (controller.text.trim().isNotEmpty)
+                IconButton(
+                  tooltip: 'Clear date',
+                  onPressed: () {
+                    setState(controller.clear);
+                  },
+                  icon: const Icon(Icons.close),
+                ),
+              const Icon(Icons.calendar_today_outlined),
+              const SizedBox(width: 8),
+            ],
+          ),
           border: const OutlineInputBorder(),
           isDense: true,
         ),
@@ -2265,50 +2310,35 @@ class _PickerOption {
 }
 
 class _WarehouseOption {
-  const _WarehouseOption({
-    required this.code,
-    required this.label,
-  });
+  const _WarehouseOption({required this.code, required this.label});
 
   final String code;
   final String label;
 }
 
 class _SalesOrderOption {
-  const _SalesOrderOption({
-    required this.soNo,
-    required this.label,
-  });
+  const _SalesOrderOption({required this.soNo, required this.label});
 
   final String soNo;
   final String label;
 }
 
 class _ServiceCallOption {
-  const _ServiceCallOption({
-    required this.callId,
-    required this.label,
-  });
+  const _ServiceCallOption({required this.callId, required this.label});
 
   final String callId;
   final String label;
 }
 
 class _EmployeeOption {
-  const _EmployeeOption({
-    required this.code,
-    required this.label,
-  });
+  const _EmployeeOption({required this.code, required this.label});
 
   final String code;
   final String label;
 }
 
 class _OpportunityOption {
-  const _OpportunityOption({
-    required this.opportunityNo,
-    required this.label,
-  });
+  const _OpportunityOption({required this.opportunityNo, required this.label});
 
   final String opportunityNo;
   final String label;
@@ -2325,20 +2355,14 @@ class _ConnectedTransferOption {
 }
 
 class _ItemOption {
-  const _ItemOption({
-    required this.itemCode,
-    required this.description,
-  });
+  const _ItemOption({required this.itemCode, required this.description});
 
   final String itemCode;
   final String description;
 }
 
 class _ProjectOption {
-  const _ProjectOption({
-    required this.projectCode,
-    required this.label,
-  });
+  const _ProjectOption({required this.projectCode, required this.label});
 
   final String projectCode;
   final String label;
