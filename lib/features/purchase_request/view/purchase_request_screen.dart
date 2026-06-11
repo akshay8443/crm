@@ -1672,9 +1672,9 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     );
 
     for (final file in _attachments) {
-      final fileBytes = await file.readAsBytes();
       final fileName = _resolvedAttachmentFileName(file);
-      if (fileBytes.isEmpty) {
+      final fileLength = await file.length();
+      if (fileLength <= 0) {
         throw Exception('Attachment is empty: $fileName');
       }
 
@@ -1685,7 +1685,12 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
         })
         ..fields['DocNo'] = docNo
         ..files.add(
-          http.MultipartFile.fromBytes('file', fileBytes, filename: fileName),
+          http.MultipartFile(
+            'file',
+            file.openRead(),
+            fileLength,
+            filename: fileName,
+          ),
         );
 
       final streamedResponse = await request.send().timeout(
@@ -2316,7 +2321,12 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
                                 child: SizedBox(
                                   width: 96,
                                   height: 96,
-                                  child: _xFileImage(file, fit: BoxFit.cover),
+                                  child: _xFileImage(
+                                    file,
+                                    fit: BoxFit.cover,
+                                    cacheWidth: 192,
+                                    cacheHeight: 192,
+                                  ),
                                 ),
                               ),
                               Positioned(
@@ -2369,7 +2379,12 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
             child: SizedBox(
               width: 420,
               height: 420,
-              child: _xFileImage(file, fit: BoxFit.contain),
+              child: _xFileImage(
+                file,
+                fit: BoxFit.contain,
+                cacheWidth: 840,
+                cacheHeight: 840,
+              ),
             ),
           ),
         );
@@ -2377,7 +2392,12 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     );
   }
 
-  Widget _xFileImage(XFile file, {required BoxFit fit}) {
+  Widget _xFileImage(
+    XFile file, {
+    required BoxFit fit,
+    int? cacheWidth,
+    int? cacheHeight,
+  }) {
     return FutureBuilder<Uint8List>(
       future: file.readAsBytes(),
       builder: (context, snapshot) {
@@ -2388,7 +2408,12 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
         if (bytes == null || bytes.isEmpty) {
           return const Center(child: Icon(Icons.image_not_supported_outlined));
         }
-        return Image.memory(bytes, fit: fit);
+        return Image.memory(
+          bytes,
+          fit: fit,
+          cacheWidth: cacheWidth,
+          cacheHeight: cacheHeight,
+        );
       },
     );
   }

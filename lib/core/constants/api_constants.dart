@@ -62,7 +62,20 @@ class ApiConstants {
       '/api/GetNextInventorytransferNumber';
   static const String createInventoryTransferRequestPath =
       '/api/CreateInventoryTransferRequest';
+  static const String getGoodsEmployeePath = '/api/GetGoodsEmployee';
+  static const String getGoodsItemPath = '/api/GetGoodsItem';
+  static const String getGoodsServiceCallPath = '/api/GetGoodsServiceCall';
+  static const String getGoodsSalesOrderPath = '/api/GetGoodsSalesOrder';
+  static const String getGoodsProjectMasterPath = '/api/GetPurchaseProject';
+  static const String getGoodsWarehouseMasterPath =
+      '/api/GetGoodsWarehouseMaster';
+  static const String getGoodsBinLocationPath = '/api/GetGoodsBinLocation';
+  static const String getNextGoodIssueNumberPath = '/GetNextGoodIsuueNumber';
+  static const String createGoodIssuePath = '/CreateGoodIssue';
+  static const String uploadGoodIssueFilePath = '/api/UploadGoodIssueFile';
   static const String createApDownPaymentPath = '/api/CreateAPDownPayment';
+  static const String getSpecificApDownPaymentPath =
+      '/GetSpecificAPDownPayment';
   static const String getSpecficServiceCallPath = '/api/GetSpecficserviceCall';
   static const String updateServiceCallStatusPath =
       '/api/updateservicecallstatus';
@@ -70,6 +83,8 @@ class ApiConstants {
   static const String uploadImagePath = '/api/UploadImage';
   static const String uploadPurchaseRequestFilePath =
       '/api/UploadPurchaseRequestFile';
+  static const String uploadApDownPaymentFilePath =
+      '/api/UploadAPDownPaymentFile';
   static const String basicAuthorization =
       'Basic cnpwX2xpdmVfYUM3YUNDa0dLSmZ0OHE6TU1KcnBneHgzY2dTcWtUaVJiN0lLemg1';
 }

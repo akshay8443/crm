@@ -69,14 +69,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
+    final mediaQuery = MediaQuery.of(context);
+    final screenWidth = mediaQuery.size.width;
     final cardWidth = screenWidth < 420 ? screenWidth - 30 : 360.0;
     final headingSize = screenWidth < 420 ? 34.0 : 44.0;
 
     return Scaffold(
       backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: Center(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => FocusScope.of(context).unfocus(),
           child: TweenAnimationBuilder<double>(
             tween: Tween(begin: 0, end: 1),
             duration: const Duration(milliseconds: 1000),
@@ -90,179 +94,196 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               );
             },
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Container(
-                width: cardWidth,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color.fromRGBO(0, 0, 0, 0.20),
-                      blurRadius: 25,
-                      offset: Offset(0, 10),
-                    ),
-                  ],
+            child: LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  mediaQuery.viewInsets.bottom + 16,
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: Stack(
-                  children: [
-                    Positioned(
-                      top: -80,
-                      right: -80,
-                      child: Container(
-                        width: 200,
-                        height: 200,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [
-                              Color.fromRGBO(238, 9, 121, 0.5),
-                              Colors.transparent,
-                            ],
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight - 32,
+                  ),
+                  child: Center(
+                    child: Container(
+                      width: cardWidth,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color.fromRGBO(0, 0, 0, 0.20),
+                            blurRadius: 25,
+                            offset: Offset(0, 10),
                           ),
-                        ),
+                        ],
                       ),
-                    ),
-                    Positioned(
-                      bottom: -100,
-                      left: -100,
-                      child: Container(
-                        width: 220,
-                        height: 220,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 35,
-                        vertical: 40,
-                      ),
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(height: 56),
-                            Text(
-                              "CRM LOGIN",
-                              style: TextStyle(
-                                fontSize: headingSize,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF303236),
-                              ),
-                            ),
-                            const SizedBox(height: 52),
-                            _roundedField(
-                              controller: emailController,
-                              hint: "Email",
-                              keyboardType: TextInputType.emailAddress,
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return "Email is required";
-                                }
-                                if (!value.contains('@')) {
-                                  return "Enter a valid email";
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            _roundedField(
-                              controller: passwordController,
-                              hint: "Password",
-                              obscureText: true,
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return "Password is required";
-                                }
-                                if (value.length < 4) {
-                                  return "Minimum 4 characters required";
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 30),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 58,
-                              child: ElevatedButton(
-                                onPressed: isLoading ? null : _login,
-                                style: ElevatedButton.styleFrom(
-                                  padding: EdgeInsets.zero,
-                                  backgroundColor: Colors.transparent,
-                                  shadowColor: Colors.transparent,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(18),
-                                  ),
-                                ),
-                                child: Ink(
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFF4A67D6),
-                                        Color(0xFFC648B6),
-                                      ],
-                                    ),
-                                    borderRadius: BorderRadius.circular(18),
-                                  ),
-                                  child: Center(
-                                    child: isLoading
-                                        ? const SizedBox(
-                                            height: 22,
-                                            width: 22,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2.5,
-                                              color: Colors.white,
-                                            ),
-                                          )
-                                        : const Text(
-                                            "Login",
-                                            style: TextStyle(
-                                              fontSize: 20,
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                  ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            top: -80,
+                            right: -80,
+                            child: Container(
+                              width: 200,
+                              height: 200,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: RadialGradient(
+                                  colors: [
+                                    Color.fromRGBO(238, 9, 121, 0.5),
+                                    Colors.transparent,
+                                  ],
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 24),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Text(
-                                  "Don’t have an account? ",
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.black,
-                                  ),
-                                ),
-                                GestureDetector(
-                                  onTap: () {
-                                    Navigator.pushNamed(context, '/signup');
-                                  },
-                                  child: const Text(
-                                    "Sign Up",
+                          ),
+                          Positioned(
+                            bottom: -100,
+                            left: -100,
+                            child: Container(
+                              width: 220,
+                              height: 220,
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 35,
+                              vertical: 40,
+                            ),
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const SizedBox(height: 56),
+                                  Text(
+                                    "CRM LOGIN",
                                     style: TextStyle(
-                                      fontSize: 16,
-                                      color: Color(0xFFE91E8E),
+                                      fontSize: headingSize,
                                       fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF303236),
                                     ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 52),
+                                  _roundedField(
+                                    controller: emailController,
+                                    hint: "Email",
+                                    keyboardType: TextInputType.emailAddress,
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return "Email is required";
+                                      }
+                                      if (!value.contains('@')) {
+                                        return "Enter a valid email";
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _roundedField(
+                                    controller: passwordController,
+                                    hint: "Password",
+                                    obscureText: true,
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return "Password is required";
+                                      }
+                                      if (value.length < 4) {
+                                        return "Minimum 4 characters required";
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 30),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 58,
+                                    child: ElevatedButton(
+                                      onPressed: isLoading ? null : _login,
+                                      style: ElevatedButton.styleFrom(
+                                        padding: EdgeInsets.zero,
+                                        backgroundColor: Colors.transparent,
+                                        shadowColor: Colors.transparent,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(18),
+                                        ),
+                                      ),
+                                      child: Ink(
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [
+                                              Color(0xFF4A67D6),
+                                              Color(0xFFC648B6),
+                                            ],
+                                          ),
+                                          borderRadius: BorderRadius.circular(18),
+                                        ),
+                                        child: Center(
+                                          child: isLoading
+                                              ? const SizedBox(
+                                                  height: 22,
+                                                  width: 22,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2.5,
+                                                        color: Colors.white,
+                                                      ),
+                                                )
+                                              : const Text(
+                                                  "Login",
+                                                  style: TextStyle(
+                                                    fontSize: 20,
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Text(
+                                        "Don’t have an account? ",
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                      GestureDetector(
+                                        onTap: () {
+                                          Navigator.pushNamed(context, '/signup');
+                                        },
+                                        child: const Text(
+                                          "Sign Up",
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            color: Color(0xFFE91E8E),
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),

@@ -11,7 +11,9 @@ import '../../../core/constants/api_constants.dart';
 import '../../../core/session/user_session.dart';
 
 class ApDownPaymentRequestScreen extends StatefulWidget {
-  const ApDownPaymentRequestScreen({super.key});
+  const ApDownPaymentRequestScreen({super.key, this.initialDocNo});
+
+  final String? initialDocNo;
 
   @override
   State<ApDownPaymentRequestScreen> createState() =>
@@ -20,10 +22,14 @@ class ApDownPaymentRequestScreen extends StatefulWidget {
 
 class _ApDownPaymentRequestScreenState
     extends State<ApDownPaymentRequestScreen> {
+  static const int _attachmentImageQuality = 70;
+  static const double _attachmentMaxWidth = 1920;
+  static const double _attachmentMaxHeight = 1920;
   static const String _noneOption = 'None';
   final ImagePicker _imagePicker = ImagePicker();
   final List<_DownPaymentItem> _items = [_DownPaymentItem()];
   final List<XFile> _attachments = [];
+  List<Map<String, dynamic>> _existingAttachments = const [];
 
   final _vendorRefNoController = TextEditingController();
   final _cardCodeController = TextEditingController();
@@ -47,7 +53,7 @@ class _ApDownPaymentRequestScreenState
   String? _priority;
   String? _paymentType;
   List<_VendorOption> _vendorOptions = const [];
-  List<String> _buyerOptions = const [];
+  List<_BuyerOption> _buyerOptions = const [];
   List<String> _ownerOptions = const [];
   List<String> _departmentOptions = const [];
   List<String> _salesOrderOptions = const [];
@@ -57,6 +63,7 @@ class _ApDownPaymentRequestScreenState
   List<String> _warehouseOptions = const [];
   List<String> _projectOptions = const [];
   bool _isSubmitting = false;
+  bool _isLoadingExistingRequest = false;
 
   final List<String> _priorityOptions = const [
     'HIGH',
@@ -70,10 +77,15 @@ class _ApDownPaymentRequestScreenState
     'Clearance',
     'Advance',
     'Vendor Payment',
-    'OthersExcepTour',
+    'OthersExceptTour',
     'EmpAdvNoTour',
     'EmpClrNoTour',
   ];
+
+  bool get _isViewDetailsMode {
+    final initialDocNo = widget.initialDocNo?.trim() ?? '';
+    return initialDocNo.isNotEmpty;
+  }
 
   List<String> _withNoneOption(List<String> options) {
     final normalized = options
@@ -113,8 +125,16 @@ class _ApDownPaymentRequestScreenState
   void initState() {
     super.initState();
     final now = DateTime.now();
-    _postingDateController.text = _formatDate(now);
-    _dueDateController.text = _formatDate(now);
+    final initialDocNo = widget.initialDocNo?.trim() ?? '';
+    if (initialDocNo.isNotEmpty) {
+      _apDownPaymentNoController.text = initialDocNo;
+      _fetchApDownPaymentDetails(initialDocNo);
+      _fetchApDownPaymentAttachments(initialDocNo);
+    } else {
+      _postingDateController.text = _formatDate(now);
+      _dueDateController.text = _formatDate(now);
+      _fetchNextApDownPaymentNumber();
+    }
     _fetchApDownPaymentVendors();
     _fetchApDownPaymentBuyers();
     _fetchApDownPaymentOwners();
@@ -122,7 +142,6 @@ class _ApDownPaymentRequestScreenState
     _fetchApDownPaymentSalesOrders();
     _fetchApDownPaymentServiceCalls();
     _fetchApDownPaymentItems();
-    _fetchNextApDownPaymentNumber();
     _fetchApDownPaymentTaxCodes();
     _fetchApDownPaymentWarehouses();
     _fetchApDownPaymentProjects();
@@ -160,78 +179,420 @@ class _ApDownPaymentRequestScreenState
         elevation: 0,
         centerTitle: false,
         titleSpacing: 0,
-        title: const Text(
-          'AP Down Payment Request',
+        title: Text(
+          _isViewDetailsMode
+              ? 'AP Down Payment Details'
+              : 'AP Down Payment Request',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w700,
             color: Colors.white,
           ),
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: OutlinedButton(
-              onPressed: () => Navigator.maybePop(context),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                backgroundColor: Colors.white.withValues(alpha: 0.12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+        actions: _isViewDetailsMode
+            ? null
+            : [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.maybePop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.2),
+                      ),
+                      backgroundColor: Colors.white.withValues(alpha: 0.12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
                 ),
-              ),
-              child: const Text('Cancel'),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.only(right: 8, top: 10, bottom: 10),
-            child: FilledButton(
-              onPressed: _isSubmitting ? null : _onSubmit,
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF1E69F2),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8, top: 10, bottom: 10),
+                  child: FilledButton(
+                    onPressed: _isSubmitting ? null : _onSubmit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E69F2),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Submit'),
+                  ),
                 ),
-              ),
-              child: _isSubmitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Submit'),
-            ),
-          ),
-        ],
+              ],
       ),
       body: SafeArea(
         top: false,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            12,
-            14,
-            12,
-            14 + MediaQuery.of(context).padding.bottom,
-          ),
-          child: Column(
-            children: [
-              _buildMainDetailsCard(),
-              const SizedBox(height: 12),
-              _buildPaymentDetailsCard(),
-              const SizedBox(height: 12),
-              _buildDocumentCard(),
-              const SizedBox(height: 12),
-              _buildItemsCard(),
-              const SizedBox(height: 12),
-              _buildAttachmentsCard(),
-            ],
-          ),
-        ),
+        child: _isLoadingExistingRequest
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  12,
+                  14,
+                  12,
+                  14 + MediaQuery.of(context).padding.bottom,
+                ),
+                child: Column(
+                  children: [
+                    _buildMainDetailsCard(),
+                    const SizedBox(height: 12),
+                    _buildPaymentDetailsCard(),
+                    const SizedBox(height: 12),
+                    _buildDocumentCard(),
+                    const SizedBox(height: 12),
+                    _buildItemsCard(),
+                    const SizedBox(height: 12),
+                    _buildAttachmentsCard(),
+                  ],
+                ),
+              ),
       ),
     );
+  }
+
+  Uri _buildNoCacheUriWithQuery(String path, Map<String, String> query) {
+    final uri = Uri.parse('${ApiConstants.baseUrl}$path');
+    final params = <String, String>{
+      ...uri.queryParameters,
+      ...query,
+      '_ts': DateTime.now().millisecondsSinceEpoch.toString(),
+    };
+    return uri.replace(queryParameters: params);
+  }
+
+  Future<void> _fetchApDownPaymentDetails(String docNo) async {
+    final normalizedDocNo = docNo.trim();
+    if (normalizedDocNo.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingExistingRequest = true;
+    });
+
+    try {
+      final uri = _buildNoCacheUriWithQuery(
+        ApiConstants.getSpecificApDownPaymentPath,
+        <String, String>{'DocNo': normalizedDocNo},
+      );
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 25));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'Get specific AP down payment failed (${response.statusCode})',
+        );
+      }
+      if (response.body.isEmpty) {
+        throw Exception('Empty response from AP down payment details API');
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      final List<dynamic> rows;
+      if (decoded is List) {
+        rows = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+        if (nested is! List) {
+          throw Exception('Invalid AP down payment detail response format');
+        }
+        rows = nested;
+      } else {
+        throw Exception('Invalid AP down payment detail response format');
+      }
+
+      final detailRows = rows.whereType<Map<String, dynamic>>().toList();
+      if (detailRows.isEmpty) {
+        throw Exception('AP down payment detail not found');
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _applyApDownPaymentDetails(
+          _normalizedApDownPaymentDetailRows(detailRows),
+        );
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to load AP Down Payment details')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingExistingRequest = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchApDownPaymentAttachments(String docNo) async {
+    final normalizedDocNo = docNo.trim();
+    if (normalizedDocNo.isEmpty) {
+      return;
+    }
+
+    final candidateQueries = <Map<String, String>>[
+      <String, String>{'docNo': normalizedDocNo},
+      <String, String>{'DocNo': normalizedDocNo},
+      <String, String>{'documentNo': normalizedDocNo},
+      <String, String>{'DocumentNo': normalizedDocNo},
+    ];
+
+    List<Map<String, dynamic>> resolvedAttachments = const [];
+    var hasSuccessfulResponse = false;
+
+    try {
+      for (final query in candidateQueries) {
+        final uri = _buildNoCacheUriWithQuery(
+          ApiConstants.getAttachmentsPath,
+          query,
+        );
+        final response = await http
+            .get(uri, headers: _getHeaders())
+            .timeout(const Duration(seconds: 20));
+
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          continue;
+        }
+
+        hasSuccessfulResponse = true;
+        if (response.body.trim().isEmpty) {
+          resolvedAttachments = const [];
+          continue;
+        }
+
+        final dynamic decoded = jsonDecode(response.body);
+        final rows = _extractAttachmentRows(decoded);
+        if (rows.isNotEmpty) {
+          resolvedAttachments = _filterAttachmentsForDocNo(
+            rows,
+            normalizedDocNo,
+          );
+          if (resolvedAttachments.isNotEmpty) {
+            break;
+          }
+        } else {
+          resolvedAttachments = const [];
+        }
+      }
+
+      if (!mounted || !hasSuccessfulResponse) {
+        return;
+      }
+
+      setState(() {
+        _existingAttachments = resolvedAttachments;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _existingAttachments = const [];
+      });
+    }
+  }
+
+  void _applyApDownPaymentDetails(List<Map<String, dynamic>> rows) {
+    if (rows.isEmpty) {
+      return;
+    }
+
+    _apDownPaymentNoController.text = _readFirstNonEmptyValue(
+      rows,
+      <String>['DocNo'],
+    );
+    _vendorRefNoController.text = _readFirstNonEmptyValue(rows, <String>[
+      'VendorRefNo',
+      'VendorReferenceNo',
+    ]);
+    _cardCodeController.text = _readFirstNonEmptyValue(rows, <String>[
+      'CardCode',
+      'BPCode',
+      'VendorCode',
+    ]);
+    _cardNameController.text = _readFirstNonEmptyValue(rows, <String>[
+      'CardName',
+      'BPName',
+      'VendorName',
+    ]);
+    _buyerController.text = _resolveBuyerDisplayValue(rows);
+    _ownerController.text = _resolveOwnerDisplayValue(rows);
+    _serviceCallController.text = _readFirstNonEmptyValue(rows, <String>[
+      'ServiceCall',
+      'ServiceCallNo',
+    ]);
+    _salesOrderController.text = _readFirstNonEmptyValue(rows, <String>[
+      'SalesOrder',
+      'SalesOrderNo',
+    ]);
+    _tourStartDateController.text = _formatDisplayDate(
+      _readFirstNonEmptyValue(rows, <String>[
+        'TourStartDate',
+        'TourFromDate',
+        'StartDate',
+      ]),
+    );
+    _tourEndDateController.text = _formatDisplayDate(
+      _readFirstNonEmptyValue(rows, <String>[
+        'TourEndDate',
+        'TourToDate',
+        'EndDate',
+      ]),
+    );
+
+    _responsibleDepartment = _readFirstNonEmptyValue(rows, <String>[
+      'ResponsibleDept',
+      'ResponsibleDepartment',
+    ]);
+    _priority = _readFirstNonEmptyValue(rows, <String>['Priority']);
+    _paymentType = _readFirstNonEmptyValue(rows, <String>['PaymentType']);
+    _dpmPercentController.text = _readFirstNonEmptyValue(rows, <String>[
+      'DPMPercent',
+      'DpmPercent',
+    ]);
+    _remarksController.text = _readFirstNonEmptyValue(
+      rows,
+      <String>['Remarks'],
+    );
+    _importantNoteController.text = _readFirstNonEmptyValue(rows, <String>[
+      'ImportantNote',
+    ]);
+    _postingDateController.text = _formatDisplayDate(
+      _readFirstNonEmptyValue(rows, <String>['PostingDate']),
+    );
+    _dueDateController.text = _formatDisplayDate(
+      _readFirstNonEmptyValue(rows, <String>['DueDate']),
+    );
+
+    for (final item in _items) {
+      item.dispose();
+    }
+    _items
+      ..clear()
+      ..addAll(
+        rows.map((row) {
+          final item = _DownPaymentItem();
+          item.itemCodeController.text = _readValue(row, <String>['ItemCode']);
+          item.descriptionController.text = _readValue(row, <String>[
+            'ItemDescription',
+            'Description',
+          ]);
+          item.qtyController.text = _readValue(row, <String>[
+            'Quantity',
+            'Qty',
+          ]);
+          item.unitPriceController.text = _readValue(row, <String>[
+            'UnitPrice',
+          ]);
+          item.discountController.text = _readValue(row, <String>[
+            'DiscountPercent',
+            'Discount',
+          ]);
+          item.taxCodeController.text = _readValue(row, <String>['TaxCode']);
+          item.warehouseController.text = _readValue(row, <String>[
+            'Warehouse',
+          ]);
+          item.projectController.text = _readValue(row, <String>[
+            'ProjectCode',
+            'Project',
+          ]);
+          return item;
+        }),
+      );
+
+    if (_items.isEmpty) {
+      _items.add(_DownPaymentItem());
+    }
+  }
+
+  List<Map<String, dynamic>> _normalizedApDownPaymentDetailRows(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final seen = <String>{};
+    final normalized = <Map<String, dynamic>>[];
+
+    for (final row in rows) {
+      final lineIdentity = _readValue(row, const <String>[
+        'LineId',
+        'LineNum',
+        'LineNo',
+        'RowNo',
+      ]);
+      final fallbackIdentity = <String>[
+        _readValue(row, const <String>['ItemCode']).toLowerCase(),
+        _readValue(row, const <String>['ItemDescription']).toLowerCase(),
+        _readValue(row, const <String>['Quantity', 'Qty']).toLowerCase(),
+        _readValue(row, const <String>['UnitPrice']).toLowerCase(),
+        _readValue(row, const <String>['ProjectCode']).toLowerCase(),
+      ].join('|');
+
+      final dedupeKey = lineIdentity.isNotEmpty
+          ? 'line:${lineIdentity.toLowerCase()}'
+          : 'fallback:$fallbackIdentity';
+
+      if (seen.add(dedupeKey)) {
+        normalized.add(row);
+      }
+    }
+
+    return normalized;
+  }
+
+  List<Map<String, dynamic>> _extractAttachmentRows(dynamic decoded) {
+    if (decoded is List) {
+      return decoded.whereType<Map<String, dynamic>>().toList();
+    }
+    if (decoded is Map<String, dynamic>) {
+      final nested = decoded['data'] ?? decoded['result'] ?? decoded['items'];
+      if (nested is List) {
+        return nested.whereType<Map<String, dynamic>>().toList();
+      }
+    }
+    return const [];
+  }
+
+  List<Map<String, dynamic>> _filterAttachmentsForDocNo(
+    List<Map<String, dynamic>> rows,
+    String docNo,
+  ) {
+    final normalizedDocNo = docNo.trim().toLowerCase();
+    final filtered = rows.where((row) {
+      final attachmentDocNo = _readValue(row, const <String>[
+        'DocNo',
+        'docNo',
+        'DocumentNo',
+        'documentNo',
+        'RefNo',
+        'ReferenceNo',
+      ]).trim().toLowerCase();
+
+      if (attachmentDocNo.isEmpty) {
+        return true;
+      }
+      return attachmentDocNo == normalizedDocNo;
+    }).toList();
+
+    return filtered;
+  }
+
+  String _formatDisplayDate(String value) {
+    final parsed = DateTime.tryParse(value.trim());
+    if (parsed == null) {
+      return value.trim();
+    }
+    return _formatDate(parsed);
   }
 
   Widget _buildMainDetailsCard() {
@@ -245,12 +606,7 @@ class _ApDownPaymentRequestScreenState
           const SizedBox(height: 10),
           _labelField('Vendor Reference Number', _vendorRefNoController),
           const SizedBox(height: 10),
-          _selectionField(
-            label: 'Buyer',
-            controller: _buyerController,
-            options: _buyerOptions,
-            searchHint: 'Search buyer',
-          ),
+          _buyerField(),
           const SizedBox(height: 10),
           _selectionField(
             label: 'Owner',
@@ -351,6 +707,7 @@ class _ApDownPaymentRequestScreenState
 
   Widget _buildItemsCard() {
     const tableMinWidth = 1280.0;
+    final isReadOnly = _isViewDetailsMode;
     final headerStyle = const TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w700,
@@ -432,21 +789,23 @@ class _ApDownPaymentRequestScreenState
             ),
           ),
           const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: _addItemRow,
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF1E69F2),
-              foregroundColor: Colors.white,
+          if (!isReadOnly)
+            FilledButton.icon(
+              onPressed: _addItemRow,
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF1E69F2),
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.add),
+              label: const Text('Add Row'),
             ),
-            icon: const Icon(Icons.add),
-            label: const Text('Add Row'),
-          ),
         ],
       ),
     );
   }
 
   Widget _itemRow(int rowNo, _DownPaymentItem item) {
+    final isReadOnly = _isViewDetailsMode;
     final inputDecoration = InputDecoration(
       isDense: true,
       filled: true,
@@ -506,6 +865,7 @@ class _ApDownPaymentRequestScreenState
             width: 120,
             child: TextField(
               controller: item.qtyController,
+              readOnly: isReadOnly,
               decoration: inputDecoration,
             ),
           ),
@@ -514,6 +874,7 @@ class _ApDownPaymentRequestScreenState
             width: 140,
             child: TextField(
               controller: item.unitPriceController,
+              readOnly: isReadOnly,
               decoration: inputDecoration,
             ),
           ),
@@ -522,6 +883,7 @@ class _ApDownPaymentRequestScreenState
             width: 130,
             child: TextField(
               controller: item.discountController,
+              readOnly: isReadOnly,
               decoration: inputDecoration,
             ),
           ),
@@ -572,11 +934,16 @@ class _ApDownPaymentRequestScreenState
           ),
           SizedBox(
             width: 80,
-            child: IconButton(
-              onPressed: () => _removeItemRow(item),
-              icon: const Icon(Icons.delete_outline, color: Color(0xFFC62828)),
-              tooltip: 'Delete row',
-            ),
+            child: isReadOnly
+                ? const SizedBox.shrink()
+                : IconButton(
+                    onPressed: () => _removeItemRow(item),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Color(0xFFC62828),
+                    ),
+                    tooltip: 'Delete row',
+                  ),
           ),
         ],
       ),
@@ -584,11 +951,15 @@ class _ApDownPaymentRequestScreenState
   }
 
   Widget _buildAttachmentsCard() {
+    final existingAttachments = _existingAttachments;
+    final hasLocalAttachments = _attachments.isNotEmpty;
+    final hasExistingAttachments = existingAttachments.isNotEmpty;
+
     return _sectionCard(
       title: 'Attachments',
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: _openUploadOptions,
+        onTap: _isViewDetailsMode ? null : _openUploadOptions,
         child: Container(
           width: double.infinity,
           constraints: const BoxConstraints(minHeight: 130),
@@ -610,14 +981,28 @@ class _ApDownPaymentRequestScreenState
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Click here to upload files',
+                Text(
+                  _isViewDetailsMode
+                      ? 'Uploaded attachments'
+                      : 'Click here to upload files',
                   style: TextStyle(
-                    color: Color(0xFF2D66C6),
+                    color: _isViewDetailsMode
+                        ? const Color(0xFF6A7685)
+                        : const Color(0xFF2D66C6),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                if (_attachments.isNotEmpty) ...[
+                if (_isViewDetailsMode && !hasExistingAttachments) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'No attachments found',
+                    style: TextStyle(
+                      color: Color(0xFF6A7685),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+                if (!_isViewDetailsMode && hasLocalAttachments) ...[
                   const SizedBox(height: 8),
                   Text(
                     '${_attachments.length} file(s) selected',
@@ -644,33 +1029,101 @@ class _ApDownPaymentRequestScreenState
                                 child: SizedBox(
                                   width: 96,
                                   height: 96,
-                                  child: _xFileImage(file, fit: BoxFit.cover),
+                                  child: _xFileImage(
+                                    file,
+                                    fit: BoxFit.cover,
+                                    cacheWidth: 192,
+                                    cacheHeight: 192,
+                                  ),
                                 ),
                               ),
                               Positioned(
                                 top: 4,
                                 right: 4,
-                                child: InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      _attachments.removeAt(index);
-                                    });
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.black54,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.close,
-                                      size: 14,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
+                                child: _isViewDetailsMode
+                                    ? const SizedBox.shrink()
+                                    : InkWell(
+                                        onTap: () {
+                                          setState(() {
+                                            _attachments.removeAt(index);
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(2),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.black54,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.close,
+                                            size: 14,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
                               ),
                             ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+                if (_isViewDetailsMode && hasExistingAttachments) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '${existingAttachments.length} file(s) found',
+                    style: const TextStyle(
+                      color: Color(0xFF2B3A4A),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 96,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: existingAttachments.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 10),
+                      itemBuilder: (context, index) {
+                        final attachment = existingAttachments[index];
+                        final imageUrl = _attachmentUrl(attachment);
+                        final fileName = _attachmentName(attachment);
+
+                        return GestureDetector(
+                          onTap: imageUrl == null
+                              ? null
+                              : () => _openNetworkAttachmentPreview(
+                                    imageUrl,
+                                    fileName,
+                                  ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: SizedBox(
+                              width: 96,
+                              height: 96,
+                              child: imageUrl == null
+                                  ? _attachmentPlaceholder(
+                                      Icons.image_not_supported_outlined,
+                                    )
+                                  : Image.network(
+                                      imageUrl,
+                                      headers: const <String, String>{
+                                        'Authorization':
+                                            ApiConstants.basicAuthorization,
+                                      },
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (
+                                        context,
+                                        error,
+                                        stackTrace,
+                                      ) {
+                                        return _attachmentPlaceholder(
+                                          Icons.broken_image_outlined,
+                                        );
+                                      },
+                                    ),
+                            ),
                           ),
                         );
                       },
@@ -693,7 +1146,9 @@ class _ApDownPaymentRequestScreenState
         labelText: 'Card Code',
         filled: true,
         fillColor: const Color(0xFFFBFBFC),
-        suffixIcon: const Icon(Icons.arrow_drop_down),
+        suffixIcon: _isViewDetailsMode
+            ? null
+            : const Icon(Icons.arrow_drop_down),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 10,
@@ -707,7 +1162,9 @@ class _ApDownPaymentRequestScreenState
           borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
         ),
       ),
-      onTap: () async {
+      onTap: _isViewDetailsMode
+          ? null
+          : () async {
         final selected = await _openVendorPicker();
         if (!mounted || selected == null) return;
         setState(() {
@@ -715,6 +1172,42 @@ class _ApDownPaymentRequestScreenState
           _cardNameController.text = selected.cardName;
         });
       },
+    );
+  }
+
+  Widget _buyerField() {
+    return TextField(
+      controller: _buyerController,
+      readOnly: true,
+      decoration: InputDecoration(
+        labelText: 'Buyer',
+        filled: true,
+        fillColor: const Color(0xFFFBFBFC),
+        suffixIcon: _isViewDetailsMode
+            ? null
+            : const Icon(Icons.arrow_drop_down),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
+        ),
+      ),
+      onTap: _isViewDetailsMode
+          ? null
+          : () async {
+              final selected = await _openBuyerPicker();
+              if (!mounted || selected == null) return;
+              setState(() {
+                _buyerController.text = selected.displayLabel;
+              });
+            },
     );
   }
 
@@ -821,40 +1314,78 @@ class _ApDownPaymentRequestScreenState
         throw Exception('Invalid AP down payment buyer master response format');
       }
 
-      final options = <String>{};
+      final buyersByCode = <String, _BuyerOption>{};
+      final buyersByLabel = <String, _BuyerOption>{};
       for (final row in rows) {
         if (row is! Map<String, dynamic>) continue;
 
-        final name = _readValue(row, <String>[
-          'SalesEmployeeName',
-          'BuyerName',
-          'EmployeeName',
-          'Name',
+        final firstName = _readValue(row, <String>[
+          'FirstName',
+          'firstName',
         ]);
+        final middleName = _readValue(row, <String>[
+          'MiddleName',
+          'middleName',
+        ]);
+        final lastName = _readValue(row, <String>[
+          'LastName',
+          'lastName',
+        ]);
+        final joinedName = <String>[
+          if (firstName.isNotEmpty) firstName,
+          if (middleName.isNotEmpty) middleName,
+          if (lastName.isNotEmpty) lastName,
+        ].join(' ');
+        final name = joinedName.isNotEmpty
+            ? joinedName
+            : _readValue(row, <String>[
+                'SalesEmployeeName',
+                'BuyerName',
+                'EmployeeName',
+                'Employee',
+                'FullName',
+                'Name',
+              ]);
         final code = _readValue(row, <String>[
           'SalesEmployeeCode',
           'SalesEmployeeID',
           'EmployeeCode',
+          'EmpCode',
+          'EmployeeId',
+          'EmployeeNo',
+          'EmpNo',
           'Code',
         ]);
 
-        String label = '';
-        if (code.isNotEmpty && name.isNotEmpty) {
-          label = '$code - $name';
-        } else if (name.isNotEmpty) {
-          label = name;
-        } else if (code.isNotEmpty) {
-          label = code;
+        final normalizedCode = code.trim();
+        final normalizedName = name.trim();
+        if (normalizedCode.isEmpty && normalizedName.isEmpty) {
+          continue;
         }
 
-        if (label.trim().isNotEmpty) {
-          options.add(label.trim());
+        final option = _BuyerOption(
+          code: normalizedCode,
+          name: normalizedName,
+        );
+        if (normalizedCode.isNotEmpty) {
+          buyersByCode[normalizedCode] = option;
+        } else {
+          buyersByLabel[option.displayLabel.toLowerCase()] = option;
         }
       }
 
+      final options = <_BuyerOption>[
+        ...buyersByCode.values,
+        ...buyersByLabel.values,
+      ]..sort((a, b) => a.displayLabel.compareTo(b.displayLabel));
+
       if (!mounted) return;
       setState(() {
-        _buyerOptions = options.toList()..sort();
+        _buyerOptions = options;
+        final matchedBuyer = _matchBuyerOption(rawValue: _buyerController.text);
+        if (matchedBuyer != null && matchedBuyer.displayLabel.trim().isNotEmpty) {
+          _buyerController.text = matchedBuyer.displayLabel;
+        }
       });
     } catch (_) {
       if (!mounted) return;
@@ -1500,7 +2031,10 @@ class _ApDownPaymentRequestScreenState
   String? _defaultWarehouseLabel() {
     for (final option in _warehouseOptions) {
       final normalized = option.trim().toLowerCase();
-      if (normalized.contains('3rd floor warehouse')) {
+      if (normalized.startsWith('3rd fl -') ||
+          normalized == '3rd fl' ||
+          normalized.contains('3rd floor-scm') ||
+          normalized.contains('3rd floor scm')) {
         return option;
       }
     }
@@ -1574,15 +2108,44 @@ class _ApDownPaymentRequestScreenState
 
   String _readValue(Map<String, dynamic> row, List<String> keys) {
     for (final key in keys) {
-      if (!row.containsKey(key)) continue;
-      final value = row[key];
-      if (value == null) continue;
-      final text = value.toString().trim();
-      if (text.isNotEmpty) {
-        return text;
+      final directValue = row[key];
+      if (directValue != null) {
+        final text = directValue.toString().trim();
+        if (text.isNotEmpty) {
+          return text;
+        }
+      }
+
+      final normalizedTargetKey = _normalizeApiKey(key);
+      for (final entry in row.entries) {
+        if (_normalizeApiKey(entry.key) != normalizedTargetKey) {
+          continue;
+        }
+
+        final text = entry.value?.toString().trim() ?? '';
+        if (text.isNotEmpty) {
+          return text;
+        }
       }
     }
     return '';
+  }
+
+  String _readFirstNonEmptyValue(
+    List<Map<String, dynamic>> rows,
+    List<String> keys,
+  ) {
+    for (final row in rows) {
+      final value = _readValue(row, keys);
+      if (value.trim().isNotEmpty) {
+        return value;
+      }
+    }
+    return '';
+  }
+
+  String _normalizeApiKey(String key) {
+    return key.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
   }
 
   String _formatSalesOrderDateForDisplay(String rawDate) {
@@ -1649,7 +2212,12 @@ class _ApDownPaymentRequestScreenState
         return;
       }
 
-      final photo = await _imagePicker.pickImage(source: ImageSource.camera);
+      final photo = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: _attachmentImageQuality,
+        maxWidth: _attachmentMaxWidth,
+        maxHeight: _attachmentMaxHeight,
+      );
       if (!mounted || photo == null) return;
 
       setState(() {
@@ -1688,7 +2256,11 @@ class _ApDownPaymentRequestScreenState
 
   Future<void> _pickFromGallery() async {
     try {
-      final files = await _imagePicker.pickMultiImage();
+      final files = await _imagePicker.pickMultiImage(
+        imageQuality: _attachmentImageQuality,
+        maxWidth: _attachmentMaxWidth,
+        maxHeight: _attachmentMaxHeight,
+      );
       if (!mounted || files.isEmpty) return;
 
       setState(() {
@@ -1737,7 +2309,12 @@ class _ApDownPaymentRequestScreenState
             child: SizedBox(
               width: 420,
               height: 420,
-              child: _xFileImage(file, fit: BoxFit.contain),
+              child: _xFileImage(
+                file,
+                fit: BoxFit.contain,
+                cacheWidth: 840,
+                cacheHeight: 840,
+              ),
             ),
           ),
         );
@@ -1745,7 +2322,60 @@ class _ApDownPaymentRequestScreenState
     );
   }
 
-  Widget _xFileImage(XFile file, {required BoxFit fit}) {
+  Future<void> _openNetworkAttachmentPreview(
+    String imageUrl,
+    String fileName,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: SizedBox(
+              width: 420,
+              height: 420,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    fileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: InteractiveViewer(
+                      child: Image.network(
+                        imageUrl,
+                        headers: const <String, String>{
+                          'Authorization': ApiConstants.basicAuthorization,
+                        },
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          return _attachmentPlaceholder(
+                            Icons.broken_image_outlined,
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _xFileImage(
+    XFile file, {
+    required BoxFit fit,
+    int? cacheWidth,
+    int? cacheHeight,
+  }) {
     return FutureBuilder<Uint8List>(
       future: file.readAsBytes(),
       builder: (context, snapshot) {
@@ -1756,8 +2386,20 @@ class _ApDownPaymentRequestScreenState
         if (bytes == null || bytes.isEmpty) {
           return const Center(child: Icon(Icons.image_not_supported_outlined));
         }
-        return Image.memory(bytes, fit: fit);
+        return Image.memory(
+          bytes,
+          fit: fit,
+          cacheWidth: cacheWidth,
+          cacheHeight: cacheHeight,
+        );
       },
+    );
+  }
+
+  Widget _attachmentPlaceholder(IconData icon) {
+    return ColoredBox(
+      color: const Color(0xFFE5E7EB),
+      child: Center(child: Icon(icon, color: const Color(0xFF6A7685))),
     );
   }
 
@@ -1801,7 +2443,7 @@ class _ApDownPaymentRequestScreenState
     return TextField(
       controller: controller,
       maxLines: maxLines,
-      readOnly: readOnly,
+      readOnly: readOnly || _isViewDetailsMode,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
       decoration: InputDecoration(
@@ -1825,27 +2467,30 @@ class _ApDownPaymentRequestScreenState
   }
 
   Widget _dateField(String label, TextEditingController controller) {
+    final isReadOnly = _isViewDetailsMode;
     return TextField(
       controller: controller,
       readOnly: true,
       decoration: InputDecoration(
         labelText: label,
         hintText: 'dd/mm/yyyy',
-        suffixIcon: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (controller.text.trim().isNotEmpty)
-              IconButton(
-                tooltip: 'Clear date',
-                onPressed: () {
-                  setState(controller.clear);
-                },
-                icon: const Icon(Icons.close, size: 18),
+        suffixIcon: isReadOnly
+            ? const Icon(Icons.calendar_today_outlined, size: 18)
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (controller.text.trim().isNotEmpty)
+                    IconButton(
+                      tooltip: 'Clear date',
+                      onPressed: () {
+                        setState(controller.clear);
+                      },
+                      icon: const Icon(Icons.close, size: 18),
+                    ),
+                  const Icon(Icons.calendar_today_outlined, size: 18),
+                  const SizedBox(width: 8),
+                ],
               ),
-            const Icon(Icons.calendar_today_outlined, size: 18),
-            const SizedBox(width: 8),
-          ],
-        ),
         filled: true,
         fillColor: const Color(0xFFFBFBFC),
         contentPadding: const EdgeInsets.symmetric(
@@ -1861,7 +2506,9 @@ class _ApDownPaymentRequestScreenState
           borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
         ),
       ),
-      onTap: () async {
+      onTap: isReadOnly
+          ? null
+          : () async {
         final initialDate = _parseDate(controller.text) ?? DateTime.now();
         final picked = await showDatePicker(
           context: context,
@@ -1890,7 +2537,9 @@ class _ApDownPaymentRequestScreenState
         labelText: label,
         filled: true,
         fillColor: const Color(0xFFFBFBFC),
-        suffixIcon: const Icon(Icons.arrow_drop_down),
+        suffixIcon: _isViewDetailsMode
+            ? null
+            : const Icon(Icons.arrow_drop_down),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 10,
@@ -1904,7 +2553,9 @@ class _ApDownPaymentRequestScreenState
           borderSide: const BorderSide(color: Color(0xFFD7DCE4)),
         ),
       ),
-      onTap: () async {
+      onTap: _isViewDetailsMode
+          ? null
+          : () async {
         final selected = await _openTextPicker(
           options: allowNone ? _withNoneOption(options) : options,
           searchHint: searchHint,
@@ -2005,6 +2656,88 @@ class _ApDownPaymentRequestScreenState
     );
   }
 
+  Future<_BuyerOption?> _openBuyerPicker() async {
+    return showModalBottomSheet<_BuyerOption>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filtered = _buyerOptions.where((option) {
+              final q = query.trim().toLowerCase();
+              if (q.isEmpty) return true;
+              return option.displayLabel.toLowerCase().contains(q) ||
+                  option.code.toLowerCase().contains(q) ||
+                  option.name.toLowerCase().contains(q);
+            }).toList(growable: false);
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 12,
+                  bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 12,
+                ),
+                child: SizedBox(
+                  height: 420,
+                  child: Column(
+                    children: [
+                      TextField(
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: 'Search buyer code / buyer name',
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          fillColor: const Color(0xFFFBFBFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFD7DCE4),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFD7DCE4),
+                            ),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          setModalState(() => query = value);
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: filtered.isEmpty
+                            ? const Center(child: Text('No buyer found'))
+                            : ListView.separated(
+                                itemCount: filtered.length,
+                                separatorBuilder: (_, __) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final option = filtered[index];
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(option.displayLabel),
+                                    onTap: () =>
+                                        Navigator.pop(sheetContext, option),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _tableSelectionField({
     required TextEditingController controller,
     required List<String> options,
@@ -2013,7 +2746,9 @@ class _ApDownPaymentRequestScreenState
     required ValueChanged<String?> onSelected,
   }) {
     return InkWell(
-      onTap: () async {
+      onTap: _isViewDetailsMode
+          ? null
+          : () async {
         final selected = await _openTextPicker(
           options: options,
           searchHint: searchHint,
@@ -2028,7 +2763,9 @@ class _ApDownPaymentRequestScreenState
           hintText: (controller.text).trim().isEmpty ? hintText : null,
           filled: true,
           fillColor: const Color(0xFFFBFBFC),
-          suffixIcon: const Icon(Icons.arrow_drop_down),
+          suffixIcon: _isViewDetailsMode
+              ? null
+              : const Icon(Icons.arrow_drop_down),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 10,
             vertical: 10,
@@ -2054,7 +2791,9 @@ class _ApDownPaymentRequestScreenState
     required ValueChanged<_ItemOption?> onSelected,
   }) {
     return InkWell(
-      onTap: () async {
+      onTap: _isViewDetailsMode
+          ? null
+          : () async {
         final selected = await _openItemPicker(
           options: _itemOptions,
           searchHint: searchHint,
@@ -2069,7 +2808,9 @@ class _ApDownPaymentRequestScreenState
           hintText: controller.text.trim().isEmpty ? hintText : null,
           filled: true,
           fillColor: const Color(0xFFFBFBFC),
-          suffixIcon: const Icon(Icons.arrow_drop_down),
+          suffixIcon: _isViewDetailsMode
+              ? null
+              : const Icon(Icons.arrow_drop_down),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 10,
             vertical: 10,
@@ -2192,7 +2933,9 @@ class _ApDownPaymentRequestScreenState
     required String hint,
   }) {
     return InkWell(
-      onTap: () async {
+      onTap: _isViewDetailsMode
+          ? null
+          : () async {
         final selected = await _openTextPicker(
           options: items,
           searchHint: hint,
@@ -2207,7 +2950,9 @@ class _ApDownPaymentRequestScreenState
           hintText: (value ?? '').trim().isEmpty ? hint : null,
           filled: true,
           fillColor: const Color(0xFFFBFBFC),
-          suffixIcon: const Icon(Icons.arrow_drop_down),
+          suffixIcon: _isViewDetailsMode
+              ? null
+              : const Icon(Icons.arrow_drop_down),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 12,
             vertical: 10,
@@ -2330,39 +3075,6 @@ class _ApDownPaymentRequestScreenState
     setState(() {
       _items.remove(item);
       item.dispose();
-    });
-  }
-
-  void _resetFormAfterSubmit() {
-    final now = DateTime.now();
-
-    _vendorRefNoController.clear();
-    _cardCodeController.clear();
-    _cardNameController.clear();
-    _buyerController.clear();
-    _ownerController.clear();
-    _serviceCallController.clear();
-    _salesOrderController.clear();
-    _tourStartDateController.clear();
-    _tourEndDateController.clear();
-    _dpmPercentController.clear();
-    _remarksController.clear();
-    _importantNoteController.clear();
-    _postingDateController.text = _formatDate(now);
-    _dueDateController.text = _formatDate(now);
-
-    for (final item in _items) {
-      item.dispose();
-    }
-
-    setState(() {
-      _responsibleDepartment = null;
-      _priority = null;
-      _paymentType = null;
-      _attachments.clear();
-      _items
-        ..clear()
-        ..add(_DownPaymentItem());
     });
   }
 
@@ -2508,13 +3220,20 @@ class _ApDownPaymentRequestScreenState
     _putIfNotBlank(payload, 'VendorRefNo', _vendorRefNoController.text);
     _putIfNotBlank(payload, 'CardCode', _cardCodeController.text.trim());
     _putIfNotBlank(payload, 'CardName', _cardNameController.text.trim());
-    _putIfNotBlank(payload, 'Buyer', _buyerController.text.trim());
+    _putIfNotBlank(payload, 'BPCode', _cardCodeController.text.trim());
+    _putIfNotBlank(payload, 'BPName', _cardNameController.text.trim());
+    _putIfNotBlank(payload, 'Buyer', _selectedBuyerCode());
+    _putIfNotBlank(payload, 'BuyerName', _selectedBuyerName());
+    _putIfNotBlank(payload, 'SalesEmployeeCode', _selectedBuyerCode());
+    _putIfNotBlank(payload, 'SalesEmployeeName', _selectedBuyerName());
     _putIfNotBlank(
       payload,
       'ResponsibleDept',
       _normalizedSelectionValue(_responsibleDepartment),
     );
-    _putIfNotBlank(payload, 'Owner', _extractCode(_ownerController.text));
+    _putIfNotBlank(payload, 'Owner', _selectedOwnerDisplayValue());
+    _putIfNotBlank(payload, 'OwnerCode', _selectedOwnerCode());
+    _putIfNotBlank(payload, 'OwnerName', _selectedOwnerName());
     _putIfNotBlank(payload, 'Priority', _normalizedSelectionValue(_priority));
     _putIfNotBlank(
       payload,
@@ -2582,15 +3301,47 @@ class _ApDownPaymentRequestScreenState
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('AP Down Payment submitted successfully')),
-      );
-      _resetFormAfterSubmit();
-      _fetchNextApDownPaymentNumber();
-    } catch (_) {
+      var docNo = _apDownPaymentNoController.text.trim();
+      var successMessage = 'AP Down Payment submitted successfully';
+      final responseBody = response.body.trim();
+      if (responseBody.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(responseBody);
+          if (decoded is Map<String, dynamic>) {
+            final serverMessage = decoded['message']?.toString().trim() ?? '';
+            if (serverMessage.isNotEmpty) {
+              successMessage = serverMessage;
+            }
+
+            final serverDocNo = _readValue(decoded, <String>[
+              'DocNo',
+              'DocNum',
+              'APDownPaymentNo',
+              'APdownPaymentNo',
+              'DocumentNo',
+            ]);
+            if (serverDocNo.isNotEmpty) {
+              docNo = serverDocNo;
+              _apDownPaymentNoController.text = serverDocNo;
+            }
+          }
+        } catch (_) {
+          // Ignore non-JSON response bodies; status code already indicates success.
+        }
+      }
+
+      await _uploadApDownPaymentAttachments(docNo);
+
+      if (docNo.isNotEmpty &&
+          !successMessage.toLowerCase().contains(docNo.toLowerCase())) {
+        successMessage = '$successMessage\nAP Down Payment No: $docNo';
+      }
+
+      await _showSubmitSuccessDialog(successMessage);
+    } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to submit AP Down Payment')),
+        SnackBar(content: Text('Unable to submit AP Down Payment: $error')),
       );
     } finally {
       if (mounted) {
@@ -2599,6 +3350,173 @@ class _ApDownPaymentRequestScreenState
         });
       }
     }
+  }
+
+  Future<void> _uploadApDownPaymentAttachments(String docNo) async {
+    final normalizedDocNo = docNo.trim();
+    if (_attachments.isEmpty || normalizedDocNo.isEmpty) {
+      return;
+    }
+
+    final uri = Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.uploadApDownPaymentFilePath}',
+    );
+    final preparedFiles = <Map<String, dynamic>>[];
+    for (final file in _attachments) {
+      final fileName = _resolvedAttachmentFileName(file);
+      final fileLength = await file.length();
+      if (fileLength <= 0) {
+        throw Exception('Attachment is empty: $fileName');
+      }
+      preparedFiles.add(<String, dynamic>{
+        'name': fileName,
+        'file': file,
+        'length': fileLength,
+      });
+    }
+
+    Future<http.StreamedResponse> sendWithFieldName(
+      String fieldName,
+      Map<String, String> fieldProfile,
+    ) async {
+      final request = http.MultipartRequest('POST', uri)
+        ..headers.addAll(<String, String>{
+          'Authorization': ApiConstants.basicAuthorization,
+          'Accept': 'application/json',
+        })
+        ..fields.addAll(fieldProfile);
+      for (final item in preparedFiles) {
+        final file = item['file'] as XFile;
+        request.files.add(
+          http.MultipartFile(
+            fieldName,
+            file.openRead(),
+            item['length'] as int,
+            filename: item['name'] as String,
+          ),
+        );
+      }
+      return request.send().timeout(const Duration(seconds: 180));
+    }
+
+    final fieldNames = <String>['file', 'files', 'File', 'Image'];
+    final fieldProfiles = <Map<String, String>>[
+      <String, String>{'DocNo': normalizedDocNo},
+      <String, String>{'docNo': normalizedDocNo},
+      <String, String>{'DocumentNo': normalizedDocNo},
+      <String, String>{'APDownPaymentNo': normalizedDocNo},
+      <String, String>{'ApDownPaymentNo': normalizedDocNo},
+    ];
+    int? lastStatusCode;
+    String lastResponseBody = '';
+    Object? lastError;
+
+    for (final fieldProfile in fieldProfiles) {
+      for (final fieldName in fieldNames) {
+        try {
+          final streamedResponse = await sendWithFieldName(
+            fieldName,
+            fieldProfile,
+          );
+          final responseBody = await streamedResponse.stream.bytesToString();
+          lastStatusCode = streamedResponse.statusCode;
+          lastResponseBody = responseBody;
+
+          if (streamedResponse.statusCode >= 200 &&
+              streamedResponse.statusCode < 300) {
+            return;
+          }
+        } catch (error) {
+          lastError = error;
+        }
+      }
+    }
+
+    if (lastResponseBody.trim().isNotEmpty) {
+      throw Exception(lastResponseBody.trim());
+    }
+    if (lastError != null) {
+      throw Exception(lastError.toString());
+    }
+    throw Exception(
+      'Attachment upload failed (${lastStatusCode ?? 'unknown'})',
+    );
+  }
+
+  Future<void> _showSubmitSuccessDialog(String message) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Success'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                Navigator.maybePop(context);
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _resolvedAttachmentFileName(XFile file) {
+    final directName = file.name.trim();
+    final path = file.path.trim();
+    final normalizedPath = path.replaceAll('\\', '/');
+    final pathName = normalizedPath.isEmpty
+        ? ''
+        : normalizedPath.split('/').last.trim();
+    final candidate = directName.isNotEmpty ? directName : pathName;
+    if (candidate.isEmpty) {
+      return 'attachment.jpg';
+    }
+    final hasExtension = RegExp(r'\.[A-Za-z0-9]{2,5}$').hasMatch(candidate);
+    return hasExtension ? candidate : '$candidate.jpg';
+  }
+
+  String _attachmentName(Map<String, dynamic> item) {
+    final value = _readValue(item, const <String>[
+      'FileName',
+      'fileName',
+      'Name',
+      'name',
+    ]);
+    return value.isEmpty ? 'Attachment' : value;
+  }
+
+  String? _attachmentUrl(Map<String, dynamic> item) {
+    final rawPath = _readValue(item, const <String>[
+      'FilePath',
+      'filePath',
+      'Path',
+      'path',
+      'Url',
+      'url',
+      'ImageUrl',
+      'imageUrl',
+    ]);
+    if (rawPath.isEmpty) {
+      return null;
+    }
+
+    final sanitizedPath = rawPath
+        .replaceAll('\\', '/')
+        .replaceAll(' ', '%20');
+    if (sanitizedPath.startsWith('http://') ||
+        sanitizedPath.startsWith('https://')) {
+      return sanitizedPath;
+    }
+
+    final normalizedPath = sanitizedPath.startsWith('/')
+        ? sanitizedPath
+        : '/$sanitizedPath';
+    return '${ApiConstants.baseUrl}$normalizedPath';
   }
 
   String _formatDate(DateTime date) {
@@ -2640,6 +3558,137 @@ class _ApDownPaymentRequestScreenState
     final idx = trimmed.indexOf(' - ');
     if (idx <= 0) return trimmed;
     return trimmed.substring(0, idx).trim();
+  }
+
+  String _extractDisplayName(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+    final idx = trimmed.indexOf(' - ');
+    if (idx <= 0) return trimmed;
+    return trimmed.substring(idx + 3).trim();
+  }
+
+  String _resolveBuyerDisplayValue(List<Map<String, dynamic>> rows) {
+    final buyerCode = _readFirstNonEmptyValue(rows, <String>[
+      'Buyer',
+      'BuyerCode',
+      'SalesEmployeeCode',
+      'SalesEmployeeID',
+      'EmployeeCode',
+      'Code',
+    ]);
+    final buyerName = _readFirstNonEmptyValue(rows, <String>[
+      'BuyerName',
+      'SalesEmployeeName',
+      'EmployeeName',
+      'FullName',
+      'Name',
+    ]);
+
+    final matchedOption = _matchBuyerOption(
+      code: buyerCode,
+      name: buyerName,
+      rawValue: buyerCode,
+    );
+    if (matchedOption != null) {
+      return matchedOption.displayLabel;
+    }
+
+    if (buyerCode.isNotEmpty && buyerName.isNotEmpty) {
+      return '$buyerCode - $buyerName';
+    }
+    if (buyerName.isNotEmpty) {
+      return buyerName;
+    }
+    return buyerCode;
+  }
+
+  _BuyerOption? _matchBuyerOption({
+    String? code,
+    String? name,
+    String? rawValue,
+  }) {
+    final normalizedCode = code?.trim() ?? '';
+    final normalizedName = name?.trim() ?? '';
+    final normalizedRaw = rawValue?.trim() ?? '';
+
+    for (final option in _buyerOptions) {
+      if (normalizedCode.isNotEmpty && option.code == normalizedCode) {
+        return option;
+      }
+      if (normalizedName.isNotEmpty && option.name == normalizedName) {
+        return option;
+      }
+      if (normalizedRaw.isNotEmpty &&
+          (option.displayLabel == normalizedRaw ||
+              option.code == normalizedRaw ||
+              option.name == normalizedRaw)) {
+        return option;
+      }
+    }
+
+    if (normalizedCode.isEmpty && normalizedName.isEmpty) {
+      return null;
+    }
+    return _BuyerOption(code: normalizedCode, name: normalizedName);
+  }
+
+  String _selectedBuyerCode() {
+    final selected = _matchBuyerOption(rawValue: _buyerController.text);
+    if (selected == null) {
+      return _extractCode(_buyerController.text);
+    }
+    return selected.code.isNotEmpty
+        ? selected.code
+        : _extractCode(selected.displayLabel);
+  }
+
+  String _selectedBuyerName() {
+    final selected = _matchBuyerOption(rawValue: _buyerController.text);
+    if (selected == null) {
+      return _extractDisplayName(_buyerController.text);
+    }
+    if (selected.name.isNotEmpty) {
+      return selected.name;
+    }
+    return _extractDisplayName(selected.displayLabel);
+  }
+
+  String _resolveOwnerDisplayValue(List<Map<String, dynamic>> rows) {
+    final ownerCode = _readFirstNonEmptyValue(rows, <String>[
+      'OwnerCode',
+      'Owner',
+      'SalesEmployeeCode',
+      'EmployeeCode',
+      'Code',
+    ]);
+    final ownerName = _readFirstNonEmptyValue(rows, <String>[
+      'OwnerName',
+      'SalesEmployeeName',
+      'EmployeeName',
+      'FullName',
+      'Name',
+    ]);
+
+    if (ownerCode.isNotEmpty && ownerName.isNotEmpty) {
+      return '$ownerCode - $ownerName';
+    }
+    if (ownerName.isNotEmpty) {
+      return ownerName;
+    }
+    return ownerCode;
+  }
+
+  String _selectedOwnerCode() {
+    return _extractCode(_ownerController.text);
+  }
+
+  String _selectedOwnerDisplayValue() {
+    return _ownerController.text.trim();
+  }
+
+  String _selectedOwnerName() {
+    return _extractDisplayName(_ownerController.text);
   }
 }
 
@@ -2685,4 +3734,17 @@ class _VendorOption {
 
   String get displayLabel =>
       cardName.trim().isEmpty ? cardCode : '$cardCode - $cardName';
+}
+
+class _BuyerOption {
+  const _BuyerOption({required this.code, required this.name});
+
+  final String code;
+  final String name;
+
+  String get displayLabel => name.trim().isEmpty
+      ? code
+      : code.trim().isEmpty
+      ? name
+      : '$code - $name';
 }

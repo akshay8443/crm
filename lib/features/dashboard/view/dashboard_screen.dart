@@ -161,6 +161,7 @@
 import 'dart:async';
 
 import 'package:crm_app/features/ap_down_payment/view/ap_down_payment_options_screen.dart';
+import 'package:crm_app/features/goods_issue/view/goods_issue_options_screen.dart';
 import 'package:crm_app/features/inventory_transfer/view/inventory_transfer_request_screen.dart';
 import 'package:crm_app/features/purchase_request/view/purchase_request_options_screen.dart';
 import 'package:flutter/material.dart';
@@ -382,7 +383,17 @@ class _SideMenu extends StatelessWidget {
               );
             },
           ),
-          _menuItem(context, title: "Goods Issue Request", onTap: (_) {}),
+          _menuItem(
+            context,
+            title: "Goods Issue Request",
+            onTap: (navigator) {
+              navigator.push(
+                MaterialPageRoute(
+                  builder: (_) => const GoodsIssueOptionsScreen(),
+                ),
+              );
+            },
+          ),
           _menuItem(
             context,
             title: "AP Down Payment Request",

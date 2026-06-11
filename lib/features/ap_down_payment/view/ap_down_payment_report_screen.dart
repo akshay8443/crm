@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../core/constants/api_constants.dart';
+import 'ap_down_payment_request_screen.dart';
 
 class ApDownPaymentReportScreen extends StatefulWidget {
   const ApDownPaymentReportScreen({super.key});
@@ -212,15 +213,31 @@ class _ApDownPaymentReportScreenState extends State<ApDownPaymentReportScreen> {
 
   String _readValue(Map<String, dynamic> json, List<String> keys) {
     for (final key in keys) {
-      final value = json[key];
-      if (value != null) {
-        final normalized = value.toString().trim();
+      final directValue = json[key];
+      if (directValue != null) {
+        final normalized = directValue.toString().trim();
+        if (normalized.isNotEmpty) {
+          return normalized;
+        }
+      }
+
+      final normalizedTargetKey = _normalizeApiKey(key);
+      for (final entry in json.entries) {
+        if (_normalizeApiKey(entry.key) != normalizedTargetKey) {
+          continue;
+        }
+
+        final normalized = entry.value?.toString().trim() ?? '';
         if (normalized.isNotEmpty) {
           return normalized;
         }
       }
     }
     return '';
+  }
+
+  String _normalizeApiKey(String key) {
+    return key.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
   }
 
   String _formatApiDate(String value) {
@@ -416,6 +433,14 @@ class _ApDownPaymentReportScreenState extends State<ApDownPaymentReportScreen> {
                 row.department.isEmpty ? '-' : row.department,
               ),
               _mobileRow('Owner', row.owner.isEmpty ? '-' : row.owner),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: OutlinedButton(
+                  onPressed: () => _openDetails(row.docNo),
+                  child: const Text('View'),
+                ),
+              ),
             ],
           ),
         );
@@ -514,6 +539,15 @@ class _ApDownPaymentReportScreenState extends State<ApDownPaymentReportScreen> {
                   ),
                 ),
               ),
+              DataColumn(
+                label: Text(
+                  'Action',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             ],
             rows: rows
                 .map(
@@ -525,6 +559,12 @@ class _ApDownPaymentReportScreenState extends State<ApDownPaymentReportScreen> {
                       DataCell(Text(row.priority)),
                       DataCell(Text(row.department)),
                       DataCell(Text(row.owner)),
+                      DataCell(
+                        TextButton(
+                          onPressed: () => _openDetails(row.docNo),
+                          child: const Text('View'),
+                        ),
+                      ),
                     ],
                   ),
                 )
@@ -563,6 +603,15 @@ class _ApDownPaymentReportScreenState extends State<ApDownPaymentReportScreen> {
         matchesPostingDate &&
         matchesPriority &&
         matchesDepartment;
+  }
+
+  void _openDetails(String docNo) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ApDownPaymentRequestScreen(initialDocNo: docNo),
+      ),
+    );
   }
 }
 
