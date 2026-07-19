@@ -9,6 +9,7 @@ class ServiceCallRequest {
   final String serialNumber;
   final String mfrSerialno;
   final String currentStatus;
+  final String approvalRequired;
   final String priority;
   final String assignedTech;
   final String serviceType;
@@ -43,6 +44,7 @@ class ServiceCallRequest {
     required this.serialNumber,
     required this.mfrSerialno,
     required this.currentStatus,
+    required this.approvalRequired,
     required this.priority,
     required this.assignedTech,
     required this.serviceType,
@@ -79,6 +81,7 @@ class ServiceCallRequest {
       'serialNumber': serialNumber,
       'mfrSerialno': mfrSerialno,
       'currentStatus': currentStatus,
+      'Approvalrequired': approvalRequired,
       'priority': priority,
       'assignedTech': assignedTech,
       'serviceType': serviceType,

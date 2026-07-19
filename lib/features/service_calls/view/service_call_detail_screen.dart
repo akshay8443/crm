@@ -9,7 +9,8 @@ class ServiceCallDetailScreen extends StatefulWidget {
   final String serviceNo;
 
   @override
-  State<ServiceCallDetailScreen> createState() => _ServiceCallDetailScreenState();
+  State<ServiceCallDetailScreen> createState() =>
+      _ServiceCallDetailScreenState();
 }
 
 class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
@@ -18,14 +19,21 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
     'Closed',
     'Call Closed JWS Open',
   ];
+  static const List<String> _approvalOptions = <String>[
+    'Pending',
+    'Approved',
+    'Rejected',
+  ];
 
   final _serviceCallViewModel = ServiceCallViewModel();
   bool _isLoading = false;
   bool _isUpdatingStatus = false;
+  bool _isUpdatingApproval = false;
   String? _loadError;
   Map<String, dynamic> _details = <String, dynamic>{};
   List<Map<String, dynamic>> _attachments = <Map<String, dynamic>>[];
   String? _selectedStatus;
+  String? _selectedApproval;
 
   Future<void> _loadDetails() async {
     setState(() {
@@ -45,7 +53,16 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
       setState(() {
         _details = data;
         _attachments = attachments;
-        _selectedStatus = _normalizeStatus(_rawValueFor(const ['CurrentStatus']));
+        _selectedStatus = _normalizeStatus(
+          _rawValueFor(const ['CurrentStatus']),
+        );
+        _selectedApproval = _normalizeApproval(
+          _rawValueFor(const [
+            'Approvalrequired',
+            'ApprovalRequired',
+            'ApprovalStatus',
+          ]),
+        );
       });
     } catch (e) {
       if (!mounted) return;
@@ -92,7 +109,11 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
           .toString()
           .trim();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message.isEmpty ? 'Status updated successfully' : message)),
+        SnackBar(
+          content: Text(
+            message.isEmpty ? 'Status updated successfully' : message,
+          ),
+        ),
       );
       await _loadDetails();
     } catch (e) {
@@ -109,9 +130,71 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
     }
   }
 
+  Future<void> _updateApprovalStatus() async {
+    final selected = _selectedApproval;
+    if (selected == null || selected.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a valid approval status.')),
+      );
+      return;
+    }
+    if (!_hasApprovalChanged) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Approval status is unchanged.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isUpdatingApproval = true;
+    });
+    try {
+      final response = await _serviceCallViewModel
+          .updateServiceCallApprovalStatus(
+            serviceNo: widget.serviceNo,
+            approvalRequired: selected,
+          );
+      if (!mounted) return;
+      final message =
+          (response['message'] ?? 'Approval status updated successfully')
+              .toString()
+              .trim();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            message.isEmpty ? 'Approval status updated successfully' : message,
+          ),
+        ),
+      );
+      await _loadDetails();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Approval status update failed: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdatingApproval = false;
+        });
+      }
+    }
+  }
+
   bool get _hasStatusChanged {
     final current = _normalizeStatus(_rawValueFor(const ['CurrentStatus']));
     return _selectedStatus != null && _selectedStatus != current;
+  }
+
+  bool get _hasApprovalChanged {
+    final current = _normalizeApproval(
+      _rawValueFor(const [
+        'Approvalrequired',
+        'ApprovalRequired',
+        'ApprovalStatus',
+      ]),
+    );
+    return _selectedApproval != null && _selectedApproval != current;
   }
 
   String? _normalizeStatus(String? value) {
@@ -124,13 +207,26 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
     return null;
   }
 
+  String? _normalizeApproval(String? value) {
+    if (value == null) return null;
+    final cleaned = value.replaceAll(RegExp(r'[^A-Za-z]'), '').toLowerCase();
+    if (cleaned == 'pending') return 'Pending';
+    if (cleaned == 'approved' || cleaned == 'approve') return 'Approved';
+    if (cleaned == 'rejected' || cleaned == 'reject') return 'Rejected';
+    return null;
+  }
+
   String _attachmentName(Map<String, dynamic> item) {
-    final value = (item['FileName'] ?? item['fileName'] ?? '').toString().trim();
+    final value = (item['FileName'] ?? item['fileName'] ?? '')
+        .toString()
+        .trim();
     return value.isEmpty ? 'Attachment' : value;
   }
 
   String? _attachmentUrl(Map<String, dynamic> item) {
-    final rawPath = (item['FilePath'] ?? item['filePath'] ?? '').toString().trim();
+    final rawPath = (item['FilePath'] ?? item['filePath'] ?? '')
+        .toString()
+        .trim();
     if (rawPath.isEmpty) return null;
     final sanitizedPath = rawPath.replaceAll('\\', '/').replaceAll(' ', '%20');
     if (sanitizedPath.startsWith('http://') ||
@@ -146,7 +242,10 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
   Widget _attachmentsSection() {
     if (_attachments.isEmpty) {
       return _section('Attachments', <Widget>[
-        const Text('No attachments found.', style: TextStyle(color: Colors.black54)),
+        const Text(
+          'No attachments found.',
+          style: TextStyle(color: Colors.black54),
+        ),
       ]);
     }
     return _section(
@@ -163,19 +262,20 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
                 onTap: imageUrl == null
                     ? null
                     : () => showDialog<void>(
-                          context: context,
-                          builder: (dialogContext) => Dialog(
-                            child: InteractiveViewer(
-                              child: Image.network(
-                                imageUrl,
-                                headers: const <String, String>{
-                                  'Authorization': ApiConstants.basicAuthorization,
-                                },
-                                fit: BoxFit.contain,
-                              ),
+                        context: context,
+                        builder: (dialogContext) => Dialog(
+                          child: InteractiveViewer(
+                            child: Image.network(
+                              imageUrl,
+                              headers: const <String, String>{
+                                'Authorization':
+                                    ApiConstants.basicAuthorization,
+                              },
+                              fit: BoxFit.contain,
                             ),
                           ),
                         ),
+                      ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: SizedBox(
@@ -314,6 +414,26 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
             ),
           ),
         ),
+        _approvalEditorTile(),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 8),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton(
+              onPressed:
+                  _isLoading || _isUpdatingApproval || !_hasApprovalChanged
+                  ? null
+                  : _updateApprovalStatus,
+              child: _isUpdatingApproval
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Update Approval'),
+            ),
+          ),
+        ),
         _infoTile('Priority', _valueFor(const ['Priority'])),
         _infoTile('Assigned Tech', _valueFor(const ['AssignedTech'])),
         _infoTile('Created Date', _valueFor(const ['CreatedDate'])),
@@ -321,7 +441,10 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
       ]),
       _section('Product', <Widget>[
         _infoTile('Item Code', _valueFor(const ['ItemCode'])),
-        _infoTile('Item Name', _valueFor(const ['ItemName', 'ItemDescription'])),
+        _infoTile(
+          'Item Name',
+          _valueFor(const ['ItemName', 'ItemDescription']),
+        ),
         _infoTile('Serial Number', _valueFor(const ['SerialNumber'])),
         _infoTile('MFR Serial No', _valueFor(const ['MFRSerialno'])),
       ]),
@@ -334,13 +457,19 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
       ]),
       _section('Tour', <Widget>[
         _infoTile('Tour Claim', _valueFor(const ['TourClaim'])),
-        _infoTile('Tour Start Date', _dateOnlyValueFor(const ['TourStartDate'])),
+        _infoTile(
+          'Tour Start Date',
+          _dateOnlyValueFor(const ['TourStartDate']),
+        ),
         _infoTile('Tour End Date', _dateOnlyValueFor(const ['TourEndDate'])),
         _infoTile('Tour Location', _valueFor(const ['TourLocation'])),
       ]),
       _section('Additional', <Widget>[
         _infoTile('Subjects', _valueFor(const ['Subjects'])),
-        _infoTile('Repair Assessment', _valueFor(const ['RepairAssesmentType'])),
+        _infoTile(
+          'Repair Assessment',
+          _valueFor(const ['RepairAssesmentType']),
+        ),
         _infoTile('Project Code', _valueFor(const ['ProjectCode'])),
         _infoTile('Department', _valueFor(const ['Department'])),
         _infoTile('Chargeable', _valueFor(const ['Chargeable'])),
@@ -408,10 +537,8 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
         hint: const Text('Select Status'),
         items: _statusOptions
             .map(
-              (status) => DropdownMenuItem<String>(
-                value: status,
-                child: Text(status),
-              ),
+              (status) =>
+                  DropdownMenuItem<String>(value: status, child: Text(status)),
             )
             .toList(),
         onChanged: _isUpdatingStatus
@@ -419,6 +546,35 @@ class _ServiceCallDetailScreenState extends State<ServiceCallDetailScreen> {
             : (value) {
                 setState(() {
                   _selectedStatus = value;
+                });
+              },
+      ),
+    );
+  }
+
+  Widget _approvalEditorTile() {
+    return _infoTileChild(
+      'Approval Required',
+      DropdownButtonFormField<String>(
+        initialValue: _selectedApproval,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          isDense: true,
+          border: OutlineInputBorder(),
+          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        ),
+        hint: const Text('Select Approval'),
+        items: _approvalOptions
+            .map(
+              (status) =>
+                  DropdownMenuItem<String>(value: status, child: Text(status)),
+            )
+            .toList(),
+        onChanged: _isUpdatingApproval
+            ? null
+            : (value) {
+                setState(() {
+                  _selectedApproval = value;
                 });
               },
       ),

@@ -185,7 +185,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     print('DASHBOARD: initState');
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _hasPrefetchedServiceData) return;
+      if (!mounted ||
+          _hasPrefetchedServiceData ||
+          !UserSession.canAccessServiceCall) {
+        return;
+      }
       _hasPrefetchedServiceData = true;
       _prefetchServiceMasterData();
     });
@@ -333,78 +337,97 @@ class _SideMenu extends StatelessWidget {
             ),
           ),
 
-          _menuItem(
-            context,
-            title: "Purchase Request",
-            onTap: (navigator) {
-              navigator.push(
-                MaterialPageRoute(
-                  builder: (_) => const PurchaseRequestOptionsScreen(),
-                ),
-              );
-            },
-          ),
-          _menuItem(
-            context,
-            title: "Inventory Transfer Request",
-            onTap: (navigator) {
-              navigator.push(
-                MaterialPageRoute(
-                  builder: (_) => const InventoryTransferRequestScreen(),
-                ),
-              );
-            },
-          ),
-          _menuItem(
-            context,
-            title: "Service Call",
-            onTap: (navigator) {
-              print('DASHBOARD: Service Call menu tapped');
-              final serviceCallViewModel = ServiceCallViewModel();
-              unawaited(
-                Future.wait<void>([
-                      serviceCallViewModel.fetchContractData().then((_) {}),
-                      serviceCallViewModel.fetchProjectData().then((_) {}),
-                      serviceCallViewModel.fetchEmployeeData().then((_) {}),
-                      serviceCallViewModel.fetchProblemTypeData().then((_) {}),
-                      serviceCallViewModel.fetchProblemSubTypeData().then(
-                        (_) {},
-                      ),
-                    ])
-                    .then((_) {
-                      print('DASHBOARD: Service APIs warmup success');
-                    })
-                    .catchError((error) {
-                      print('DASHBOARD: Service APIs warmup error: $error');
-                    }),
-              );
-              navigator.push(
-                MaterialPageRoute(builder: (_) => const ServiceCallScreen()),
-              );
-            },
-          ),
-          _menuItem(
-            context,
-            title: "Goods Issue Request",
-            onTap: (navigator) {
-              navigator.push(
-                MaterialPageRoute(
-                  builder: (_) => const GoodsIssueOptionsScreen(),
-                ),
-              );
-            },
-          ),
-          _menuItem(
-            context,
-            title: "AP Down Payment Request",
-            onTap: (navigator) {
-              navigator.push(
-                MaterialPageRoute(
-                  builder: (_) => const ApDownPaymentOptionsScreen(),
-                ),
-              );
-            },
-          ),
+          if (UserSession.canAccessPurchaseRequest)
+            _menuItem(
+              context,
+              title: "Purchase Request",
+              onTap: (navigator) {
+                navigator.push(
+                  MaterialPageRoute(
+                    builder: (_) => const PurchaseRequestOptionsScreen(),
+                  ),
+                );
+              },
+            ),
+          if (UserSession.canAccessInventoryTransfer)
+            _menuItem(
+              context,
+              title: "Inventory Transfer Request",
+              onTap: (navigator) {
+                navigator.push(
+                  MaterialPageRoute(
+                    builder: (_) => const InventoryTransferRequestScreen(),
+                  ),
+                );
+              },
+            ),
+          if (UserSession.canAccessServiceCall)
+            _menuItem(
+              context,
+              title: "Service Call",
+              onTap: (navigator) {
+                print('DASHBOARD: Service Call menu tapped');
+                final serviceCallViewModel = ServiceCallViewModel();
+                unawaited(
+                  Future.wait<void>([
+                        serviceCallViewModel.fetchContractData().then((_) {}),
+                        serviceCallViewModel.fetchProjectData().then((_) {}),
+                        serviceCallViewModel.fetchEmployeeData().then((_) {}),
+                        serviceCallViewModel.fetchProblemTypeData().then(
+                          (_) {},
+                        ),
+                        serviceCallViewModel.fetchProblemSubTypeData().then(
+                          (_) {},
+                        ),
+                      ])
+                      .then((_) {
+                        print('DASHBOARD: Service APIs warmup success');
+                      })
+                      .catchError((error) {
+                        print('DASHBOARD: Service APIs warmup error: $error');
+                      }),
+                );
+                navigator.push(
+                  MaterialPageRoute(builder: (_) => const ServiceCallScreen()),
+                );
+              },
+            ),
+          if (UserSession.canAccessGoodsIssue)
+            _menuItem(
+              context,
+              title: "Goods Issue Request",
+              onTap: (navigator) {
+                navigator.push(
+                  MaterialPageRoute(
+                    builder: (_) => const GoodsIssueOptionsScreen(),
+                  ),
+                );
+              },
+            ),
+          if (UserSession.canAccessApDownPayment)
+            _menuItem(
+              context,
+              title: "AP Down Payment Request",
+              onTap: (navigator) {
+                navigator.push(
+                  MaterialPageRoute(
+                    builder: (_) => const ApDownPaymentOptionsScreen(),
+                  ),
+                );
+              },
+            ),
+          if (!UserSession.canAccessPurchaseRequest &&
+              !UserSession.canAccessInventoryTransfer &&
+              !UserSession.canAccessServiceCall &&
+              !UserSession.canAccessGoodsIssue &&
+              !UserSession.canAccessApDownPayment)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'No modules assigned',
+                style: TextStyle(color: Colors.black54),
+              ),
+            ),
         ],
       ),
     );

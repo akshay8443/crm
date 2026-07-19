@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/api_constants.dart';
 import '../../../core/session/user_session.dart';
@@ -344,52 +345,32 @@ class _ApDownPaymentRequestScreenState
       return;
     }
 
-    final candidateQueries = <Map<String, String>>[
-      <String, String>{'docNo': normalizedDocNo},
-      <String, String>{'DocNo': normalizedDocNo},
-      <String, String>{'documentNo': normalizedDocNo},
-      <String, String>{'DocumentNo': normalizedDocNo},
-    ];
-
     List<Map<String, dynamic>> resolvedAttachments = const [];
-    var hasSuccessfulResponse = false;
 
     try {
-      for (final query in candidateQueries) {
-        final uri = _buildNoCacheUriWithQuery(
-          ApiConstants.getAttachmentsPath,
-          query,
-        );
-        final response = await http
-            .get(uri, headers: _getHeaders())
-            .timeout(const Duration(seconds: 20));
+      final uri = _buildNoCacheUriWithQuery(
+        ApiConstants.getApDownPaymentAttachmentsPath,
+        <String, String>{'DocNo': normalizedDocNo},
+      );
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 20));
 
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          continue;
-        }
-
-        hasSuccessfulResponse = true;
-        if (response.body.trim().isEmpty) {
-          resolvedAttachments = const [];
-          continue;
-        }
-
-        final dynamic decoded = jsonDecode(response.body);
-        final rows = _extractAttachmentRows(decoded);
-        if (rows.isNotEmpty) {
-          resolvedAttachments = _filterAttachmentsForDocNo(
-            rows,
-            normalizedDocNo,
-          );
-          if (resolvedAttachments.isNotEmpty) {
-            break;
-          }
-        } else {
-          resolvedAttachments = const [];
-        }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Attachment API failed (${response.statusCode})');
       }
 
-      if (!mounted || !hasSuccessfulResponse) {
+      if (response.body.trim().isEmpty) {
+        resolvedAttachments = const [];
+      } else {
+        final dynamic decoded = jsonDecode(response.body);
+        resolvedAttachments = _filterAttachmentsForDocNo(
+          _extractAttachmentRows(decoded),
+          normalizedDocNo,
+        );
+      }
+
+      if (!mounted) {
         return;
       }
 
@@ -409,10 +390,9 @@ class _ApDownPaymentRequestScreenState
       return;
     }
 
-    _apDownPaymentNoController.text = _readFirstNonEmptyValue(
-      rows,
-      <String>['DocNo'],
-    );
+    _apDownPaymentNoController.text = _readFirstNonEmptyValue(rows, <String>[
+      'DocNo',
+    ]);
     _vendorRefNoController.text = _readFirstNonEmptyValue(rows, <String>[
       'VendorRefNo',
       'VendorReferenceNo',
@@ -462,10 +442,9 @@ class _ApDownPaymentRequestScreenState
       'DPMPercent',
       'DpmPercent',
     ]);
-    _remarksController.text = _readFirstNonEmptyValue(
-      rows,
-      <String>['Remarks'],
-    );
+    _remarksController.text = _readFirstNonEmptyValue(rows, <String>[
+      'Remarks',
+    ]);
     _importantNoteController.text = _readFirstNonEmptyValue(rows, <String>[
       'ImportantNote',
     ]);
@@ -899,6 +878,11 @@ class _ApDownPaymentRequestScreenState
                 setState(() {
                   item.taxCodeController.text = selected ?? '';
                 });
+                // Check if selected tax code is GST-related
+                if (selected != null &&
+                    selected.toUpperCase().contains('GST')) {
+                  _showGstHsnWarningDialog();
+                }
               },
             ),
           ),
@@ -1087,43 +1071,58 @@ class _ApDownPaymentRequestScreenState
                       separatorBuilder: (_, _) => const SizedBox(width: 10),
                       itemBuilder: (context, index) {
                         final attachment = existingAttachments[index];
-                        final imageUrl = _attachmentUrl(attachment);
+                        final attachmentUrl = _attachmentUrl(attachment);
                         final fileName = _attachmentName(attachment);
+                        final isPdf = _isPdfAttachment(fileName, attachmentUrl);
+                        final isImage = _isImageAttachment(
+                          fileName,
+                          attachmentUrl,
+                        );
 
                         return GestureDetector(
-                          onTap: imageUrl == null
+                          onTap: attachmentUrl == null
                               ? null
-                              : () => _openNetworkAttachmentPreview(
-                                    imageUrl,
-                                    fileName,
-                                  ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: SizedBox(
-                              width: 96,
-                              height: 96,
-                              child: imageUrl == null
-                                  ? _attachmentPlaceholder(
-                                      Icons.image_not_supported_outlined,
-                                    )
-                                  : Image.network(
-                                      imageUrl,
+                              : () => isPdf
+                                    ? _openPdfAttachment(
+                                        attachmentUrl,
+                                        fileName,
+                                      )
+                                    : _openNetworkAttachmentPreview(
+                                        attachmentUrl,
+                                        fileName,
+                                        isImage,
+                                      ),
+                          child: SizedBox(
+                            width: 96,
+                            height: 96,
+                            child: attachmentUrl == null
+                                ? _attachmentPlaceholder(
+                                    Icons.insert_drive_file_outlined,
+                                  )
+                                : isPdf
+                                ? _pdfAttachmentTile(fileName)
+                                : isImage
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.network(
+                                      attachmentUrl,
                                       headers: const <String, String>{
                                         'Authorization':
                                             ApiConstants.basicAuthorization,
                                       },
                                       fit: BoxFit.cover,
-                                      errorBuilder: (
-                                        context,
-                                        error,
-                                        stackTrace,
-                                      ) {
-                                        return _attachmentPlaceholder(
-                                          Icons.broken_image_outlined,
-                                        );
-                                      },
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                            return _attachmentPlaceholder(
+                                              Icons.broken_image_outlined,
+                                            );
+                                          },
                                     ),
-                            ),
+                                  )
+                                : _fileAttachmentTile(
+                                    fileName,
+                                    Icons.insert_drive_file_outlined,
+                                  ),
                           ),
                         );
                       },
@@ -1165,13 +1164,13 @@ class _ApDownPaymentRequestScreenState
       onTap: _isViewDetailsMode
           ? null
           : () async {
-        final selected = await _openVendorPicker();
-        if (!mounted || selected == null) return;
-        setState(() {
-          _cardCodeController.text = selected.cardCode;
-          _cardNameController.text = selected.cardName;
-        });
-      },
+              final selected = await _openVendorPicker();
+              if (!mounted || selected == null) return;
+              setState(() {
+                _cardCodeController.text = selected.cardCode;
+                _cardNameController.text = selected.cardName;
+              });
+            },
     );
   }
 
@@ -1319,18 +1318,12 @@ class _ApDownPaymentRequestScreenState
       for (final row in rows) {
         if (row is! Map<String, dynamic>) continue;
 
-        final firstName = _readValue(row, <String>[
-          'FirstName',
-          'firstName',
-        ]);
+        final firstName = _readValue(row, <String>['FirstName', 'firstName']);
         final middleName = _readValue(row, <String>[
           'MiddleName',
           'middleName',
         ]);
-        final lastName = _readValue(row, <String>[
-          'LastName',
-          'lastName',
-        ]);
+        final lastName = _readValue(row, <String>['LastName', 'lastName']);
         final joinedName = <String>[
           if (firstName.isNotEmpty) firstName,
           if (middleName.isNotEmpty) middleName,
@@ -1363,10 +1356,7 @@ class _ApDownPaymentRequestScreenState
           continue;
         }
 
-        final option = _BuyerOption(
-          code: normalizedCode,
-          name: normalizedName,
-        );
+        final option = _BuyerOption(code: normalizedCode, name: normalizedName);
         if (normalizedCode.isNotEmpty) {
           buyersByCode[normalizedCode] = option;
         } else {
@@ -1383,7 +1373,8 @@ class _ApDownPaymentRequestScreenState
       setState(() {
         _buyerOptions = options;
         final matchedBuyer = _matchBuyerOption(rawValue: _buyerController.text);
-        if (matchedBuyer != null && matchedBuyer.displayLabel.trim().isNotEmpty) {
+        if (matchedBuyer != null &&
+            matchedBuyer.displayLabel.trim().isNotEmpty) {
           _buyerController.text = matchedBuyer.displayLabel;
         }
       });
@@ -1822,7 +1813,9 @@ class _ApDownPaymentRequestScreenState
       if (!mounted) return;
       setState(() {
         _itemOptions = (itemOptions.toList()
-          ..sort((a, b) => a.code.toLowerCase().compareTo(b.code.toLowerCase())));
+          ..sort(
+            (a, b) => a.code.toLowerCase().compareTo(b.code.toLowerCase()),
+          ));
       });
     } catch (_) {
       if (!mounted) return;
@@ -2323,8 +2316,9 @@ class _ApDownPaymentRequestScreenState
   }
 
   Future<void> _openNetworkAttachmentPreview(
-    String imageUrl,
+    String attachmentUrl,
     String fileName,
+    bool isImage,
   ) async {
     await showDialog<void>(
       context: context,
@@ -2346,20 +2340,26 @@ class _ApDownPaymentRequestScreenState
                   ),
                   const SizedBox(height: 12),
                   Expanded(
-                    child: InteractiveViewer(
-                      child: Image.network(
-                        imageUrl,
-                        headers: const <String, String>{
-                          'Authorization': ApiConstants.basicAuthorization,
-                        },
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) {
-                          return _attachmentPlaceholder(
-                            Icons.broken_image_outlined,
-                          );
-                        },
-                      ),
-                    ),
+                    child: isImage
+                        ? InteractiveViewer(
+                            child: Image.network(
+                              attachmentUrl,
+                              headers: const <String, String>{
+                                'Authorization':
+                                    ApiConstants.basicAuthorization,
+                              },
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) {
+                                return _attachmentPlaceholder(
+                                  Icons.broken_image_outlined,
+                                );
+                              },
+                            ),
+                          )
+                        : _fileAttachmentTile(
+                            fileName,
+                            Icons.insert_drive_file_outlined,
+                          ),
                   ),
                 ],
               ),
@@ -2368,6 +2368,23 @@ class _ApDownPaymentRequestScreenState
         );
       },
     );
+  }
+
+  Future<void> _openPdfAttachment(String pdfUrl, String fileName) async {
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        Uri.parse(pdfUrl),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unable to open PDF: $fileName')));
+    }
   }
 
   Widget _xFileImage(
@@ -2400,6 +2417,39 @@ class _ApDownPaymentRequestScreenState
     return ColoredBox(
       color: const Color(0xFFE5E7EB),
       child: Center(child: Icon(icon, color: const Color(0xFF6A7685))),
+    );
+  }
+
+  Widget _pdfAttachmentTile(String fileName) {
+    return _fileAttachmentTile(fileName, Icons.picture_as_pdf_outlined);
+  }
+
+  Widget _fileAttachmentTile(String fileName, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F5F8),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD7DCE4)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: const Color(0xFF5C6675), size: 30),
+          const SizedBox(height: 6),
+          Text(
+            fileName,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFF2B3A4A),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2509,17 +2559,17 @@ class _ApDownPaymentRequestScreenState
       onTap: isReadOnly
           ? null
           : () async {
-        final initialDate = _parseDate(controller.text) ?? DateTime.now();
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: initialDate,
-          firstDate: DateTime(2020),
-          lastDate: DateTime(2100),
-        );
+              final initialDate = _parseDate(controller.text) ?? DateTime.now();
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: initialDate,
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2100),
+              );
 
-        if (!mounted || picked == null) return;
-        controller.text = _formatDate(picked);
-      },
+              if (!mounted || picked == null) return;
+              controller.text = _formatDate(picked);
+            },
     );
   }
 
@@ -2556,16 +2606,16 @@ class _ApDownPaymentRequestScreenState
       onTap: _isViewDetailsMode
           ? null
           : () async {
-        final selected = await _openTextPicker(
-          options: allowNone ? _withNoneOption(options) : options,
-          searchHint: searchHint,
-          emptyText: 'No data found',
-        );
-        if (!mounted || selected == null) return;
-        setState(() {
-          controller.text = _isNoneOrEmpty(selected) ? '' : selected;
-        });
-      },
+              final selected = await _openTextPicker(
+                options: allowNone ? _withNoneOption(options) : options,
+                searchHint: searchHint,
+                emptyText: 'No data found',
+              );
+              if (!mounted || selected == null) return;
+              setState(() {
+                controller.text = _isNoneOrEmpty(selected) ? '' : selected;
+              });
+            },
     );
   }
 
@@ -2664,13 +2714,15 @@ class _ApDownPaymentRequestScreenState
         var query = '';
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final filtered = _buyerOptions.where((option) {
-              final q = query.trim().toLowerCase();
-              if (q.isEmpty) return true;
-              return option.displayLabel.toLowerCase().contains(q) ||
-                  option.code.toLowerCase().contains(q) ||
-                  option.name.toLowerCase().contains(q);
-            }).toList(growable: false);
+            final filtered = _buyerOptions
+                .where((option) {
+                  final q = query.trim().toLowerCase();
+                  if (q.isEmpty) return true;
+                  return option.displayLabel.toLowerCase().contains(q) ||
+                      option.code.toLowerCase().contains(q) ||
+                      option.name.toLowerCase().contains(q);
+                })
+                .toList(growable: false);
 
             return SafeArea(
               child: Padding(
@@ -2749,14 +2801,14 @@ class _ApDownPaymentRequestScreenState
       onTap: _isViewDetailsMode
           ? null
           : () async {
-        final selected = await _openTextPicker(
-          options: options,
-          searchHint: searchHint,
-          emptyText: 'No data found',
-        );
-        if (selected == null) return;
-        onSelected(_isNoneOrEmpty(selected) ? null : selected);
-      },
+              final selected = await _openTextPicker(
+                options: options,
+                searchHint: searchHint,
+                emptyText: 'No data found',
+              );
+              if (selected == null) return;
+              onSelected(_isNoneOrEmpty(selected) ? null : selected);
+            },
       child: InputDecorator(
         decoration: InputDecoration(
           isDense: true,
@@ -2794,14 +2846,14 @@ class _ApDownPaymentRequestScreenState
       onTap: _isViewDetailsMode
           ? null
           : () async {
-        final selected = await _openItemPicker(
-          options: _itemOptions,
-          searchHint: searchHint,
-          emptyText: 'No item found',
-        );
-        if (selected == null) return;
-        onSelected(selected);
-      },
+              final selected = await _openItemPicker(
+                options: _itemOptions,
+                searchHint: searchHint,
+                emptyText: 'No item found',
+              );
+              if (selected == null) return;
+              onSelected(selected);
+            },
       child: InputDecorator(
         decoration: InputDecoration(
           isDense: true,
@@ -2936,14 +2988,14 @@ class _ApDownPaymentRequestScreenState
       onTap: _isViewDetailsMode
           ? null
           : () async {
-        final selected = await _openTextPicker(
-          options: items,
-          searchHint: hint,
-          emptyText: 'No data found',
-        );
-        if (selected == null) return;
-        onChanged(_isNoneOrEmpty(selected) ? null : selected);
-      },
+              final selected = await _openTextPicker(
+                options: items,
+                searchHint: hint,
+                emptyText: 'No data found',
+              );
+              if (selected == null) return;
+              onChanged(_isNoneOrEmpty(selected) ? null : selected);
+            },
       child: InputDecorator(
         decoration: InputDecoration(
           labelText: label,
@@ -3443,6 +3495,27 @@ class _ApDownPaymentRequestScreenState
     );
   }
 
+  Future<void> _showGstHsnWarningDialog() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Warning'),
+          content: const Text('You have to update HSN in this itemcode in SAP'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _showSubmitSuccessDialog(String message) async {
     await showDialog<void>(
       context: context,
@@ -3505,9 +3578,7 @@ class _ApDownPaymentRequestScreenState
       return null;
     }
 
-    final sanitizedPath = rawPath
-        .replaceAll('\\', '/')
-        .replaceAll(' ', '%20');
+    final sanitizedPath = rawPath.replaceAll('\\', '/').replaceAll(' ', '%20');
     if (sanitizedPath.startsWith('http://') ||
         sanitizedPath.startsWith('https://')) {
       return sanitizedPath;
@@ -3517,6 +3588,37 @@ class _ApDownPaymentRequestScreenState
         ? sanitizedPath
         : '/$sanitizedPath';
     return '${ApiConstants.baseUrl}$normalizedPath';
+  }
+
+  bool _isPdfAttachment(String fileName, String? url) {
+    return _attachmentExtension(fileName, url) == 'pdf';
+  }
+
+  bool _isImageAttachment(String fileName, String? url) {
+    const imageExtensions = <String>{
+      'jpg',
+      'jpeg',
+      'png',
+      'gif',
+      'bmp',
+      'webp',
+      'heic',
+      'heif',
+    };
+    return imageExtensions.contains(_attachmentExtension(fileName, url));
+  }
+
+  String _attachmentExtension(String fileName, String? url) {
+    final source = (fileName.trim().isNotEmpty ? fileName : url ?? '')
+        .split('?')
+        .first
+        .split('#')
+        .first;
+    final dotIndex = source.lastIndexOf('.');
+    if (dotIndex == -1 || dotIndex == source.length - 1) {
+      return '';
+    }
+    return source.substring(dotIndex + 1).toLowerCase();
   }
 
   String _formatDate(DateTime date) {

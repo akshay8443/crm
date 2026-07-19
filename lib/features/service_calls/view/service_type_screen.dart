@@ -313,6 +313,7 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
 
   // ---------------- Dropdown Values ----------------
   String ticketStatus = "Select Status";
+  String approvalRequired = "Pending";
   String priority = "Select Priority";
   String customerCode = _selectCustomerCode;
   String customerName = _selectCustomerName;
@@ -546,8 +547,12 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     customerName = contract.businessPartnerName.trim().isEmpty
         ? _selectCustomerName
         : contract.businessPartnerName.trim();
-    phone = contract.phone.trim().isEmpty ? _selectPhone : contract.phone.trim();
-    email = contract.email.trim().isEmpty ? _selectEmail : contract.email.trim();
+    phone = contract.phone.trim().isEmpty
+        ? _selectPhone
+        : contract.phone.trim();
+    email = contract.email.trim().isEmpty
+        ? _selectEmail
+        : contract.email.trim();
     _syncCustomerTextControllers();
   }
 
@@ -598,12 +603,12 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
 
     final matches = rows.where((row) {
       if (hasItemCode && !_isSameValue(row.itemNo, itemCodeValue)) return false;
-      if (hasItemName &&
-          !_isSameValue(row.itemDescription, itemNameValue)) {
+      if (hasItemName && !_isSameValue(row.itemDescription, itemNameValue)) {
         return false;
       }
       if (hasMfr && !_isSameValue(row.mfrSerialNo, mfrValue)) return false;
-      if (hasSerial && !_isSameValue(row.serialNumber, serialValue)) return false;
+      if (hasSerial && !_isSameValue(row.serialNumber, serialValue))
+        return false;
       return true;
     });
 
@@ -621,8 +626,9 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
   }
 
   void _syncCustomerTextControllers() {
-    customerNameCtrl.text =
-        customerName == _selectCustomerName ? '' : customerName;
+    customerNameCtrl.text = customerName == _selectCustomerName
+        ? ''
+        : customerName;
     phoneCtrl.text = phone == _selectPhone ? '' : phone;
     emailCtrl.text = email == _selectEmail ? '' : email;
   }
@@ -902,787 +908,811 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
             _lastUserPointerDownAt = DateTime.now();
           },
           child: Form(
-          key: _formKey,
-          autovalidateMode: _showValidationErrors
-              ? AutovalidateMode.always
-              : AutovalidateMode.disabled,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _section(
-                "Customer Information",
-                Column(
-                  children: [
-                    _dropdown(
-                      "Customer Code",
-                      customerCode,
-                      _customerCodeItems,
-                      _onCustomerCodeChanged,
-                      requiredField: true,
-                      invalidValues: const [_selectCustomerCode],
-                    ),
-                    _field(
-                      "Customer Name",
-                      customerNameCtrl,
-                      readOnly: true,
-                    ),
-                    _dropdown(
-                      "Contract No.",
-                      contractNo,
-                      _contractNoItems,
-                      _onContractNoChanged,
-                    ),
-                    if (_isContractDataLoading)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 12),
-                        child: LinearProgressIndicator(minHeight: 2),
-                      ),
-                    if (!_isContractDataLoading && _contractLoadError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              color: Colors.redAccent,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _contractLoadError!,
-                                style: const TextStyle(color: Colors.redAccent),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: _loadContractData,
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    _dropdown(
-                      "Project",
-                      selectedProject,
-                      _projectItems,
-                      (v) => setState(
-                        () => selectedProject =
-                            (v ?? '').trim().isEmpty ? _selectProject : v!,
-                      ),
-                      requiredField: true,
-                      invalidValues: const [_selectProject],
-                    ),
-                    if (_isProjectDataLoading)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 12),
-                        child: LinearProgressIndicator(minHeight: 2),
-                      ),
-                    if (!_isProjectDataLoading && _projectLoadError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              color: Colors.redAccent,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _projectLoadError!,
-                                style: const TextStyle(color: Colors.redAccent),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: _loadProjectData,
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-
-              _section(
-                "Ticket Status",
-                Column(
-                  children: [
-                    _dropdown("Status", ticketStatus, [
-                      "Select Status",
-                      "Open",
-                      "Closed",
-                    ], (v) => setState(() => ticketStatus = v!),
+            key: _formKey,
+            autovalidateMode: _showValidationErrors
+                ? AutovalidateMode.always
+                : AutovalidateMode.disabled,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                _section(
+                  "Customer Information",
+                  Column(
+                    children: [
+                      _dropdown(
+                        "Customer Code",
+                        customerCode,
+                        _customerCodeItems,
+                        _onCustomerCodeChanged,
                         requiredField: true,
-                        invalidValues: const ["Select Status"]),
-                    _dropdown("Priority", priority, [
-                      "Select Priority",
-                      "Low",
-                      "Medium",
-                      "High",
-                    ], (v) => setState(() => priority = v!),
-                        requiredField: true,
-                        invalidValues: const ["Select Priority"]),
-                    const Divider(),
-                    _dropdown(
-                      "Attend By",
-                      assignedTech,
-                      _employeeItems,
-                      (v) => setState(
-                        () => assignedTech =
-                            (v ?? '').trim().isEmpty ? _selectAttendBy : v!,
+                        invalidValues: const [_selectCustomerCode],
                       ),
-                      requiredField: true,
-                      invalidValues: const [_selectAttendBy],
-                    ),
-                    if (_isEmployeeDataLoading)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 12),
-                        child: LinearProgressIndicator(minHeight: 2),
+                      _field("Customer Name", customerNameCtrl, readOnly: true),
+                      _dropdown(
+                        "Contract No.",
+                        contractNo,
+                        _contractNoItems,
+                        _onContractNoChanged,
                       ),
-                    if (!_isEmployeeDataLoading && _employeeLoadError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              color: Colors.redAccent,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _employeeLoadError!,
-                                style: const TextStyle(color: Colors.redAccent),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: _loadEmployeeData,
-                              child: const Text('Retry'),
-                            ),
-                          ],
+                      if (_isContractDataLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: LinearProgressIndicator(minHeight: 2),
                         ),
-                      ),
-                    _dropdown("Department", department, [
-                      "Select Department",
-                      "Accounts",
-                      "Admin",
-                      "Audit",
-                      "D&D",
-                      "Engineering",
-                      "Finance&Accounts",
-                      "HR",
-                      "IT",
-                      "Management",
-                      "Pre_Sales",
-                      "Production",
-                      "Projects",
-                      "Sales",
-                      "Solution Design - Operations",
-                      "Supply_Chain_Management",
-                      "Support",
-                    ], (v) => setState(() => department = v!),
-                        requiredField: true,
-                        invalidValues: const ["Select Department"]),
-                    _dropdown(
-                      "Service Type",
-                      serviceType,
-                      [
-                        "Select Service Type",
-                        "CAMC",
-                        "NCAMC",
-                        "WARRANTY",
-                        "OUT OF WARRANTY",
-                        "REPAIR",
-                        "AMC",
-                        "UPGRADATION",
-                        "PROJECT",
-                      ],
-                      (v) => setState(() => serviceType = v!),
-                      requiredField: true,
-                      invalidValues: const ["Select Service Type"],
-                    ),
-                  ],
-                ),
-              ),
-
-              _section(
-                "Call Classification",
-                Column(
-                  children: [
-                    _dropdown(
-                      "Origin Type",
-                      originType,
-                      [
-                        "Select",
-                        "Email",
-                        "Telephone No.",
-                        "Web",
-                        "Site Visit",
-                        "Speed Post",
-                        "By Hand",
-                        "Telephonic",
-                        "Letter",
-                        "Highcourt",
-                        "Courier",
-                      ],
-                      (v) => setState(() => originType = v!),
-                      requiredField: true,
-                      invalidValues: const ["Select"],
-                    ),
-                    _dropdown("Call Type", callType, [
-                      "Select Call Type",
-                      "Visit",
-                      "Vendor Visit",
-                      "Remote Support",
-                      "Repair",
-                      "DEMO",
-                      "Replacement",
-                      "Sales Visit",
-                      "PMT",
-                      "Survey",
-                      "Meeting",
-                      "Service",
-                      "Repair Assessment",
-                      "Follow up",
-                      "Paint",
-                      "Site Visit",
-                      "Repair Production",
-                      "Jobsheet Repair",
-                      "Tour",
-                      "Upgradation",
-                      "reference for repair",
-                      "PTZ Camera",
-                      "Hydraulic Oil",
-                      "UNDER WARRENTY",
-                      "double entry",
-                      "Onsite work",
-                    ], (v) => setState(() => callType = v!),
-                        requiredField: true,
-                        invalidValues: const ["Select Call Type"]),
-                    _dropdown("Chargeable", chargeable, [
-                      "Select",
-                      "Chargeable",
-                      "FOC",
-                    ], (v) => setState(() => chargeable = v!),
-                        requiredField: true,
-                        invalidValues: const ["Select"]),
-                    _dropdown("Job Sheet", jobSheet, [
-                      "Select",
-                      "Yes",
-                      "No",
-                    ], (v) => setState(() => jobSheet = v!),
-                        requiredField: true,
-                        invalidValues: const ["Select"]),
-                    _dropdown(
-                      "Problem Type",
-                      problemType,
-                      _problemTypeItems,
-                      (v) => setState(() => problemType = v!),
-                      requiredField: true,
-                      invalidValues: const [_selectProblemType],
-                    ),
-                    if (_isProblemTypeDataLoading)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 12),
-                        child: LinearProgressIndicator(minHeight: 2),
-                      ),
-                    if (!_isProblemTypeDataLoading &&
-                        _problemTypeLoadError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              color: Colors.redAccent,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _problemTypeLoadError!,
-                                style: const TextStyle(color: Colors.redAccent),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: _loadProblemTypeData,
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    _dropdown(
-                      "Problem Sub Type",
-                      problemSubType,
-                      _problemSubTypeItems,
-                      (v) => setState(() => problemSubType = v!),
-                      requiredField: true,
-                      invalidValues: const [_selectProblemSubType],
-                    ),
-                    if (_isProblemSubTypeDataLoading)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 12),
-                        child: LinearProgressIndicator(minHeight: 2),
-                      ),
-                    if (!_isProblemSubTypeDataLoading &&
-                        _problemSubTypeLoadError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              color: Colors.redAccent,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _problemSubTypeLoadError!,
-                                style: const TextStyle(color: Colors.redAccent),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: _loadProblemSubTypeData,
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-
-              _section(
-                "Tour Details",
-                Column(
-                  children: [
-                    _dropdown("Tour Claim", tourClaim, [
-                      "No",
-                      "Yes",
-                    ], (v) => setState(() => tourClaim = v!)),
-                    _datePicker(
-                      "Tour Start Date",
-                      date: tourStartDate,
-                      controller: tourStartDateCtrl,
-                      errorText: _showValidationErrors &&
-                              _isTourClaimYes &&
-                              tourStartDate == null
-                          ? "Please select Tour Start Date"
-                          : null,
-                      onPicked: (d) => setState(() {
-                        tourStartDate = d;
-                        tourStartDateCtrl.text = _formatDate(d);
-                        if (tourEndDate != null && tourEndDate!.isBefore(d)) {
-                          tourEndDate = null;
-                          tourEndDateCtrl.clear();
-                        }
-                      }),
-                    ),
-                    _datePicker(
-                      "Tour End Date",
-                      date: tourEndDate,
-                      controller: tourEndDateCtrl,
-                      firstDate: tourStartDate ?? DateTime(2000),
-                      errorText: _showValidationErrors &&
-                              _isTourClaimYes &&
-                              tourEndDate == null
-                          ? "Please select Tour End Date"
-                          : null,
-                      onPicked: (d) => setState(() {
-                        tourEndDate = d;
-                        tourEndDateCtrl.text = _formatDate(d);
-                      }),
-                    ),
-                    _field(
-                      "Tour Expense Amount",
-                      expenseCtrl,
-                      keyboard: TextInputType.number,
-                      requiredField: _isTourClaimYes,
-                    ),
-                    _field(
-                      "Tour Location",
-                      tourLocationCtrl,
-                      requiredField: _isTourClaimYes,
-                    ),
-                    _dropdown(
-                      "Repair Assessment Type",
-                      repairAssessment,
-                      ["Select", "Opto", "Non Opto"],
-                      (v) => setState(() => repairAssessment = v!),
-                    ),
-                  ],
-                ),
-              ),
-
-              _section(
-                "Product Details",
-                Column(
-                  children: [
-                    _dropdown(
-                      "Item Code",
-                      itemCode,
-                      _itemCodeItems,
-                      (v) => setState(() {
-                        itemCode =
-                            (v ?? '').trim().isEmpty ? _selectItemCode : v!;
-                        final matched = _findMatchingProductRow(
-                          byItemCode: itemCode,
-                        );
-                        if (matched != null) _setProductFieldsFromContract(matched);
-                      }),
-                      requiredField: true,
-                      invalidValues: const [_selectItemCode],
-                    ),
-                    _dropdown(
-                      "Item Name",
-                      itemName,
-                      _itemNameItems,
-                      (v) => setState(() {
-                        itemName =
-                            (v ?? '').trim().isEmpty ? _selectItemName : v!;
-                        final matched = _findMatchingProductRow(
-                          byItemName: itemName,
-                        );
-                        if (matched != null) _setProductFieldsFromContract(matched);
-                      }),
-                      requiredField: true,
-                      invalidValues: const [_selectItemName],
-                    ),
-                    _dropdown(
-                      "MFR Serial Number",
-                      mfrSerialNumber,
-                      _mfrSerialItems,
-                      (v) => setState(() {
-                        mfrSerialNumber = (v ?? '').trim().isEmpty
-                            ? _selectMfrSerialNo
-                            : v!;
-                        final matched = _findMatchingProductRow(
-                          byMfrSerial: mfrSerialNumber,
-                        );
-                        if (matched != null) _setProductFieldsFromContract(matched);
-                      }),
-                      invalidValues: const [_selectMfrSerialNo],
-                    ),
-                    _dropdown(
-                      "Serial Number",
-                      serialNumber,
-                      _serialNumberItems,
-                      (v) => setState(() {
-                        serialNumber = (v ?? '').trim().isEmpty
-                            ? _selectSerialNumber
-                            : v!;
-                        final matched = _findMatchingProductRow(
-                          bySerialNumber: serialNumber,
-                        );
-                        if (matched != null) _setProductFieldsFromContract(matched);
-                      }),
-                      requiredField: true,
-                      invalidValues: const [_selectSerialNumber],
-                    ),
-                  ],
-                ),
-              ),
-
-              _section(
-                "Administrative",
-                Column(
-                  children: [
-                    TextFormField(
-                      controller: subjectCtrl,
-                      maxLines: 3,
-                      validator: (value) {
-                        if ((value ?? '').trim().isEmpty) {
-                          return "Please enter Subject";
-                        }
-                        return null;
-                      },
-                      decoration: const InputDecoration(
-                        labelText: "Subject",
-                        hintText: "Enter subject details",
-                        border: OutlineInputBorder(),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Color(0xFFBDBDBD)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Color(0xFF2563EB),
-                            width: 1.5,
-                          ),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.red),
-                        ),
-                        focusedErrorBorder: OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Colors.red,
-                            width: 1.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _field(
-                      "Service No",
-                      serviceNoCtrl,
-                      readOnly: true,
-                      canRequestFocus: false,
-                    ),
-                    _pickerField(
-                      "Created",
-                      createdCtrl,
-                      requiredField: true,
-                      onPick: _pickCreatedDate,
-                    ),
-                    _pickerField(
-                      "Closed Date",
-                      closedDateCtrl,
-                      onPick: _pickClosedDate,
-                    ),
-                    TextFormField(
-                      controller: remarksCtrl,
-                      maxLines: 4,
-                      validator: (value) {
-                        if ((value ?? '').trim().isEmpty) {
-                          return "Please enter Remarks";
-                        }
-                        return null;
-                      },
-                      decoration: const InputDecoration(
-                        labelText: "Remarks",
-                        border: OutlineInputBorder(),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Color(0xFFBDBDBD)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Color(0xFF2563EB), width: 1.5),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.red),
-                        ),
-                        focusedErrorBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.red, width: 1.5),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              _section(
-                "Attachments",
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isWide = constraints.maxWidth >= 700;
-                    return Column(
-                      children: [
-                        if (isWide)
-                          Row(
+                      if (!_isContractDataLoading && _contractLoadError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
                             children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: Colors.redAccent,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
                               Expanded(
-                                child: _attachmentTile(
-                                  label: "Take Photo",
-                                  icon: Icons.camera_alt_outlined,
-                                  onTap: () => _pickAttachment(
-                                    ImageSource.camera,
+                                child: Text(
+                                  _contractLoadError!,
+                                  style: const TextStyle(
+                                    color: Colors.redAccent,
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _attachmentTile(
-                                  label: "Gallery",
-                                  icon: Icons.image_outlined,
-                                  onTap: () => _pickAttachment(
-                                    ImageSource.gallery,
-                                  ),
-                                ),
+                              TextButton(
+                                onPressed: _loadContractData,
+                                child: const Text('Retry'),
                               ),
                             ],
-                          )
-                        else ...[
-                          _attachmentTile(
-                            label: "Take Photo",
-                            icon: Icons.camera_alt_outlined,
-                            onTap: () => _pickAttachment(
-                              ImageSource.camera,
-                            ),
                           ),
-                          const SizedBox(height: 12),
-                          _attachmentTile(
-                            label: "Gallery",
-                            icon: Icons.image_outlined,
-                            onTap: () => _pickAttachment(
-                              ImageSource.gallery,
-                            ),
-                          ),
-                        ],
-                        if (_attachments.isNotEmpty) ...[
-                          const SizedBox(height: 16),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              "Selected Attachments (${_attachments.length})",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
+                        ),
+                      _dropdown(
+                        "Project",
+                        selectedProject,
+                        _projectItems,
+                        (v) => setState(
+                          () => selectedProject = (v ?? '').trim().isEmpty
+                              ? _selectProject
+                              : v!,
+                        ),
+                        requiredField: true,
+                        invalidValues: const [_selectProject],
+                      ),
+                      if (_isProjectDataLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      if (!_isProjectDataLoading && _projectLoadError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: Colors.redAccent,
+                                size: 18,
                               ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          ..._attachments.map(
-                            (file) => Container(
-                              margin: const EdgeInsets.only(
-                                bottom: 10,
-                              ),
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: const Color(0xFFE5E7EB),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _projectLoadError!,
+                                  style: const TextStyle(
+                                    color: Colors.redAccent,
+                                  ),
                                 ),
-                                borderRadius:
-                                    BorderRadius.circular(10),
                               ),
-                              child: Row(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: InkWell(
-                                      onTap: () =>
-                                          _viewAttachment(file),
-                                      borderRadius:
-                                          BorderRadius.circular(
-                                              8),
-                                      child: Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment
-                                                .start,
-                                        children: [
-                                          _attachmentPreview(
-                                              file),
-                                          const SizedBox(
-                                              width: 10),
-                                          Expanded(
-                                            child: Padding(
-                                              padding:
-                                                  const EdgeInsets
-                                                      .only(
-                                                top: 4,
-                                              ),
-                                              child: Text(
-                                                _fileName(
-                                                  file.path,
-                                                ),
-                                                maxLines: 2,
-                                                overflow:
-                                                    TextOverflow
-                                                        .ellipsis,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon:
-                                        const Icon(Icons.close),
-                                    onPressed: () {
-                                      setState(() {
-                                        _attachments
-                                            .remove(file);
-                                      });
-                                    },
-                                  ),
-                                ],
+                              TextButton(
+                                onPressed: _loadProjectData,
+                                child: const Text('Retry'),
                               ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                _section(
+                  "Ticket Status",
+                  Column(
+                    children: [
+                      _dropdown(
+                        "Status",
+                        ticketStatus,
+                        ["Select Status", "Open", "Closed"],
+                        (v) => setState(() => ticketStatus = v!),
+                        requiredField: true,
+                        invalidValues: const ["Select Status"],
+                      ),
+                      _dropdown(
+                        "Approval Required",
+                        approvalRequired,
+                        const ["Pending", "Approved", "Rejected"],
+                        (v) {},
+                        enabled: false,
+                      ),
+                      _dropdown(
+                        "Priority",
+                        priority,
+                        ["Select Priority", "Low", "Medium", "High"],
+                        (v) => setState(() => priority = v!),
+                        requiredField: true,
+                        invalidValues: const ["Select Priority"],
+                      ),
+                      const Divider(),
+                      _dropdown(
+                        "Attend By",
+                        assignedTech,
+                        _employeeItems,
+                        (v) => setState(
+                          () => assignedTech = (v ?? '').trim().isEmpty
+                              ? _selectAttendBy
+                              : v!,
+                        ),
+                        requiredField: true,
+                        invalidValues: const [_selectAttendBy],
+                      ),
+                      if (_isEmployeeDataLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      if (!_isEmployeeDataLoading && _employeeLoadError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: Colors.redAccent,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _employeeLoadError!,
+                                  style: const TextStyle(
+                                    color: Colors.redAccent,
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _loadEmployeeData,
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      _dropdown(
+                        "Department",
+                        department,
+                        [
+                          "Select Department",
+                          "Accounts",
+                          "Admin",
+                          "Audit",
+                          "D&D",
+                          "Engineering",
+                          "Finance&Accounts",
+                          "HR",
+                          "IT",
+                          "Management",
+                          "Pre_Sales",
+                          "Production",
+                          "Projects",
+                          "Sales",
+                          "Solution Design - Operations",
+                          "Supply_Chain_Management",
+                          "Support",
+                        ],
+                        (v) => setState(() => department = v!),
+                        requiredField: true,
+                        invalidValues: const ["Select Department"],
+                      ),
+                      _dropdown(
+                        "Service Type",
+                        serviceType,
+                        [
+                          "Select Service Type",
+                          "CAMC",
+                          "NCAMC",
+                          "WARRANTY",
+                          "OUT OF WARRANTY",
+                          "REPAIR",
+                          "AMC",
+                          "UPGRADATION",
+                          "PROJECT",
+                        ],
+                        (v) => setState(() => serviceType = v!),
+                        requiredField: true,
+                        invalidValues: const ["Select Service Type"],
+                      ),
+                    ],
+                  ),
+                ),
+
+                _section(
+                  "Call Classification",
+                  Column(
+                    children: [
+                      _dropdown(
+                        "Origin Type",
+                        originType,
+                        [
+                          "Select",
+                          "Email",
+                          "Telephone No.",
+                          "Web",
+                          "Site Visit",
+                          "Speed Post",
+                          "By Hand",
+                          "Telephonic",
+                          "Letter",
+                          "Highcourt",
+                          "Courier",
+                        ],
+                        (v) => setState(() => originType = v!),
+                        requiredField: true,
+                        invalidValues: const ["Select"],
+                      ),
+                      _dropdown(
+                        "Call Type",
+                        callType,
+                        [
+                          "Select Call Type",
+                          "Visit",
+                          "Vendor Visit",
+                          "Remote Support",
+                          "Repair",
+                          "DEMO",
+                          "Replacement",
+                          "Sales Visit",
+                          "PMT",
+                          "Survey",
+                          "Meeting",
+                          "Service",
+                          "Repair Assessment",
+                          "Follow up",
+                          "Paint",
+                          "Site Visit",
+                          "Repair Production",
+                          "Jobsheet Repair",
+                          "Tour",
+                          "Upgradation",
+                          "reference for repair",
+                          "PTZ Camera",
+                          "Hydraulic Oil",
+                          "UNDER WARRENTY",
+                          "double entry",
+                          "Onsite work",
+                        ],
+                        (v) => setState(() => callType = v!),
+                        requiredField: true,
+                        invalidValues: const ["Select Call Type"],
+                      ),
+                      _dropdown(
+                        "Chargeable",
+                        chargeable,
+                        ["Select", "Chargeable", "FOC"],
+                        (v) => setState(() => chargeable = v!),
+                        requiredField: true,
+                        invalidValues: const ["Select"],
+                      ),
+                      _dropdown(
+                        "Job Sheet",
+                        jobSheet,
+                        ["Select", "Yes", "No"],
+                        (v) => setState(() => jobSheet = v!),
+                        requiredField: true,
+                        invalidValues: const ["Select"],
+                      ),
+                      _dropdown(
+                        "Problem Type",
+                        problemType,
+                        _problemTypeItems,
+                        (v) => setState(() => problemType = v!),
+                        requiredField: true,
+                        invalidValues: const [_selectProblemType],
+                      ),
+                      if (_isProblemTypeDataLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      if (!_isProblemTypeDataLoading &&
+                          _problemTypeLoadError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: Colors.redAccent,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _problemTypeLoadError!,
+                                  style: const TextStyle(
+                                    color: Colors.redAccent,
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _loadProblemTypeData,
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      _dropdown(
+                        "Problem Sub Type",
+                        problemSubType,
+                        _problemSubTypeItems,
+                        (v) => setState(() => problemSubType = v!),
+                        requiredField: true,
+                        invalidValues: const [_selectProblemSubType],
+                      ),
+                      if (_isProblemSubTypeDataLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      if (!_isProblemSubTypeDataLoading &&
+                          _problemSubTypeLoadError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: Colors.redAccent,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _problemSubTypeLoadError!,
+                                  style: const TextStyle(
+                                    color: Colors.redAccent,
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _loadProblemSubTypeData,
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                _section(
+                  "Tour Details",
+                  Column(
+                    children: [
+                      _dropdown("Tour Claim", tourClaim, [
+                        "No",
+                        "Yes",
+                      ], (v) => setState(() => tourClaim = v!)),
+                      _datePicker(
+                        "Tour Start Date",
+                        date: tourStartDate,
+                        controller: tourStartDateCtrl,
+                        errorText:
+                            _showValidationErrors &&
+                                _isTourClaimYes &&
+                                tourStartDate == null
+                            ? "Please select Tour Start Date"
+                            : null,
+                        onPicked: (d) => setState(() {
+                          tourStartDate = d;
+                          tourStartDateCtrl.text = _formatDate(d);
+                          if (tourEndDate != null && tourEndDate!.isBefore(d)) {
+                            tourEndDate = null;
+                            tourEndDateCtrl.clear();
+                          }
+                        }),
+                      ),
+                      _datePicker(
+                        "Tour End Date",
+                        date: tourEndDate,
+                        controller: tourEndDateCtrl,
+                        firstDate: tourStartDate ?? DateTime(2000),
+                        errorText:
+                            _showValidationErrors &&
+                                _isTourClaimYes &&
+                                tourEndDate == null
+                            ? "Please select Tour End Date"
+                            : null,
+                        onPicked: (d) => setState(() {
+                          tourEndDate = d;
+                          tourEndDateCtrl.text = _formatDate(d);
+                        }),
+                      ),
+                      _field(
+                        "Tour Expense Amount",
+                        expenseCtrl,
+                        keyboard: TextInputType.number,
+                        requiredField: _isTourClaimYes,
+                      ),
+                      _field(
+                        "Tour Location",
+                        tourLocationCtrl,
+                        requiredField: _isTourClaimYes,
+                      ),
+                      _dropdown(
+                        "Repair Assessment Type",
+                        repairAssessment,
+                        ["Select", "Opto", "Non Opto"],
+                        (v) => setState(() => repairAssessment = v!),
+                      ),
+                    ],
+                  ),
+                ),
+
+                _section(
+                  "Product Details",
+                  Column(
+                    children: [
+                      _dropdown(
+                        "Item Code",
+                        itemCode,
+                        _itemCodeItems,
+                        (v) => setState(() {
+                          itemCode = (v ?? '').trim().isEmpty
+                              ? _selectItemCode
+                              : v!;
+                          final matched = _findMatchingProductRow(
+                            byItemCode: itemCode,
+                          );
+                          if (matched != null)
+                            _setProductFieldsFromContract(matched);
+                        }),
+                        requiredField: true,
+                        invalidValues: const [_selectItemCode],
+                      ),
+                      _dropdown(
+                        "Item Name",
+                        itemName,
+                        _itemNameItems,
+                        (v) => setState(() {
+                          itemName = (v ?? '').trim().isEmpty
+                              ? _selectItemName
+                              : v!;
+                          final matched = _findMatchingProductRow(
+                            byItemName: itemName,
+                          );
+                          if (matched != null)
+                            _setProductFieldsFromContract(matched);
+                        }),
+                        requiredField: true,
+                        invalidValues: const [_selectItemName],
+                      ),
+                      _dropdown(
+                        "MFR Serial Number",
+                        mfrSerialNumber,
+                        _mfrSerialItems,
+                        (v) => setState(() {
+                          mfrSerialNumber = (v ?? '').trim().isEmpty
+                              ? _selectMfrSerialNo
+                              : v!;
+                          final matched = _findMatchingProductRow(
+                            byMfrSerial: mfrSerialNumber,
+                          );
+                          if (matched != null)
+                            _setProductFieldsFromContract(matched);
+                        }),
+                        invalidValues: const [_selectMfrSerialNo],
+                      ),
+                      _dropdown(
+                        "Serial Number",
+                        serialNumber,
+                        _serialNumberItems,
+                        (v) => setState(() {
+                          serialNumber = (v ?? '').trim().isEmpty
+                              ? _selectSerialNumber
+                              : v!;
+                          final matched = _findMatchingProductRow(
+                            bySerialNumber: serialNumber,
+                          );
+                          if (matched != null)
+                            _setProductFieldsFromContract(matched);
+                        }),
+                        requiredField: true,
+                        invalidValues: const [_selectSerialNumber],
+                      ),
+                    ],
+                  ),
+                ),
+
+                _section(
+                  "Administrative",
+                  Column(
+                    children: [
+                      TextFormField(
+                        controller: subjectCtrl,
+                        maxLines: 3,
+                        validator: (value) {
+                          if ((value ?? '').trim().isEmpty) {
+                            return "Please enter Subject";
+                          }
+                          return null;
+                        },
+                        decoration: const InputDecoration(
+                          labelText: "Subject",
+                          hintText: "Enter subject details",
+                          border: OutlineInputBorder(),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Color(0xFFBDBDBD)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Color(0xFF2563EB),
+                              width: 1.5,
                             ),
                           ),
-                        ],
-                      ],
-                    );
-                  },
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              Builder(
-                builder: (context) {
-                  final isProcessing =
-                      _isSubmitting ||
-                      _isContractDataLoading ||
-                      _isProjectDataLoading ||
-                      _isEmployeeDataLoading ||
-                      _isProblemTypeDataLoading ||
-                      _isProblemSubTypeDataLoading ||
-                      _isServiceNoLoading;
-                  return Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: isProcessing ? null : () => Navigator.pop(context),
-                          child: Container(
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFFBDBDBD)),
-                            ),
-                            alignment: Alignment.center,
-                            child: const Text(
-                              "Cancel",
-                              style: TextStyle(
-                                color: Colors.black87,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          errorBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.red),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Colors.red,
+                              width: 1.5,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: isProcessing ? null : _confirmAndSubmit,
-                          child: Container(
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: isProcessing
-                                  ? Colors.grey.shade400
-                                  : Theme.of(context).colorScheme.primary,
-                              borderRadius: BorderRadius.circular(8),
+                      const SizedBox(height: 12),
+                      _field(
+                        "Service No",
+                        serviceNoCtrl,
+                        readOnly: true,
+                        canRequestFocus: false,
+                      ),
+                      _pickerField(
+                        "Created",
+                        createdCtrl,
+                        requiredField: true,
+                        onPick: _pickCreatedDate,
+                      ),
+                      _pickerField(
+                        "Closed Date",
+                        closedDateCtrl,
+                        onPick: _pickClosedDate,
+                      ),
+                      TextFormField(
+                        controller: remarksCtrl,
+                        maxLines: 4,
+                        validator: (value) {
+                          if ((value ?? '').trim().isEmpty) {
+                            return "Please enter Remarks";
+                          }
+                          return null;
+                        },
+                        decoration: const InputDecoration(
+                          labelText: "Remarks",
+                          border: OutlineInputBorder(),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Color(0xFFBDBDBD)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Color(0xFF2563EB),
+                              width: 1.5,
                             ),
-                            alignment: Alignment.center,
-                            child: isProcessing
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
-                                      ),
-                                    ),
-                                  )
-                                : const Text(
-                                    "Submit",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.red),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Colors.red,
+                              width: 1.5,
+                            ),
                           ),
                         ),
                       ),
                     ],
-                  );
-                },
-              ),
-            ],
-          ),
+                  ),
+                ),
+
+                _section(
+                  "Attachments",
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth >= 700;
+                      return Column(
+                        children: [
+                          if (isWide)
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _attachmentTile(
+                                    label: "Take Photo",
+                                    icon: Icons.camera_alt_outlined,
+                                    onTap: () =>
+                                        _pickAttachment(ImageSource.camera),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _attachmentTile(
+                                    label: "Gallery",
+                                    icon: Icons.image_outlined,
+                                    onTap: () =>
+                                        _pickAttachment(ImageSource.gallery),
+                                  ),
+                                ),
+                              ],
+                            )
+                          else ...[
+                            _attachmentTile(
+                              label: "Take Photo",
+                              icon: Icons.camera_alt_outlined,
+                              onTap: () => _pickAttachment(ImageSource.camera),
+                            ),
+                            const SizedBox(height: 12),
+                            _attachmentTile(
+                              label: "Gallery",
+                              icon: Icons.image_outlined,
+                              onTap: () => _pickAttachment(ImageSource.gallery),
+                            ),
+                          ],
+                          if (_attachments.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                "Selected Attachments (${_attachments.length})",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            ..._attachments.map(
+                              (file) => Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: const Color(0xFFE5E7EB),
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: InkWell(
+                                        onTap: () => _viewAttachment(file),
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            _attachmentPreview(file),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Padding(
+                                                padding: const EdgeInsets.only(
+                                                  top: 4,
+                                                ),
+                                                child: Text(
+                                                  _fileName(file.path),
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.close),
+                                      onPressed: () {
+                                        setState(() {
+                                          _attachments.remove(file);
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                Builder(
+                  builder: (context) {
+                    final isProcessing =
+                        _isSubmitting ||
+                        _isContractDataLoading ||
+                        _isProjectDataLoading ||
+                        _isEmployeeDataLoading ||
+                        _isProblemTypeDataLoading ||
+                        _isProblemSubTypeDataLoading ||
+                        _isServiceNoLoading;
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: isProcessing
+                                ? null
+                                : () => Navigator.pop(context),
+                            child: Container(
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: const Color(0xFFBDBDBD),
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: const Text(
+                                "Cancel",
+                                style: TextStyle(
+                                  color: Colors.black87,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: isProcessing ? null : _confirmAndSubmit,
+                            child: Container(
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: isProcessing
+                                    ? Colors.grey.shade400
+                                    : Theme.of(context).colorScheme.primary,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              alignment: Alignment.center,
+                              child: isProcessing
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.white,
+                                            ),
+                                      ),
+                                    )
+                                  : const Text(
+                                      "Submit",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1805,12 +1835,14 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
     ValueChanged<String?> onChanged, {
     bool requiredField = false,
     List<String> invalidValues = const <String>[],
+    bool enabled = true,
   }) {
     final uniqueItems = LinkedHashSet<String>.from(
       items.map((e) => e.trim()).where((e) => e.isNotEmpty),
     ).toList();
     final normalizedValue = value?.trim();
-    final dropdownValue = (normalizedValue != null &&
+    final dropdownValue =
+        (normalizedValue != null &&
             uniqueItems.any((item) => item == normalizedValue))
         ? normalizedValue
         : null;
@@ -1833,16 +1865,18 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
           final currentValue = (fieldState.value ?? '').trim();
           final hasSelection = currentValue.isNotEmpty;
           return GestureDetector(
-            onTap: () async {
-              final selected = await _showSearchableDropdownDialog(
-                label: label,
-                items: uniqueItems,
-                currentValue: currentValue,
-              );
-              if (selected == null) return;
-              fieldState.didChange(selected);
-              onChanged(selected);
-            },
+            onTap: enabled
+                ? () async {
+                    final selected = await _showSearchableDropdownDialog(
+                      label: label,
+                      items: uniqueItems,
+                      currentValue: currentValue,
+                    );
+                    if (selected == null) return;
+                    fieldState.didChange(selected);
+                    onChanged(selected);
+                  }
+                : null,
             child: InputDecorator(
               isEmpty: !hasSelection,
               decoration: InputDecoration(
@@ -1861,13 +1895,20 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                 focusedErrorBorder: const OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.red, width: 1.5),
                 ),
-                suffixIcon: const Icon(Icons.arrow_drop_down),
+                suffixIcon: Icon(
+                  Icons.arrow_drop_down,
+                  color: enabled ? null : Colors.black38,
+                ),
                 errorText: fieldState.errorText,
+                filled: !enabled,
+                fillColor: enabled ? null : const Color(0xFFF3F4F6),
               ),
               child: hasSelection
                   ? Text(
                       currentValue,
-                      style: const TextStyle(color: Colors.black87),
+                      style: TextStyle(
+                        color: enabled ? Colors.black87 : Colors.black54,
+                      ),
                     )
                   : const SizedBox.shrink(),
             ),
@@ -1905,7 +1946,9 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
                         final query = value.trim().toLowerCase();
                         setDialogState(() {
                           filteredItems = items
-                              .where((item) => item.toLowerCase().contains(query))
+                              .where(
+                                (item) => item.toLowerCase().contains(query),
+                              )
                               .toList();
                         });
                       },
@@ -2261,7 +2304,9 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Confirm Submit'),
-        content: const Text('Are you sure you want to submit this service call?'),
+        content: const Text(
+          'Are you sure you want to submit this service call?',
+        ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -2330,15 +2375,16 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
       serialNumber: _valueOrEmpty(serialNumber, <String>[_selectSerialNumber]),
       mfrSerialno: _valueOrEmpty(mfrSerialNumber, <String>[_selectMfrSerialNo]),
       currentStatus: ticketStatus.trim(),
+      approvalRequired: 'Pending',
       priority: priority.trim(),
-      assignedTech: _valueOrEmpty(assignedTech, <String>[
-        _selectAttendBy,
-      ]),
+      assignedTech: _valueOrEmpty(assignedTech, <String>[_selectAttendBy]),
       serviceType: _valueOrEmpty(serviceType, <String>['Select Service Type']),
       department: _valueOrEmpty(department, <String>['Select Department']),
       serviceNo: serviceNoCtrl.text.trim(),
       createdDate: _formatDateTimeForApi(createdDate),
-      closedDate: closedDate == null ? null : _formatDateTimeForApi(closedDate!),
+      closedDate: closedDate == null
+          ? null
+          : _formatDateTimeForApi(closedDate!),
       originType: _valueOrEmpty(originType, <String>['Select']),
       problemType: _valueOrEmpty(problemType, <String>[_selectProblemType]),
       problemSubType: _valueOrEmpty(problemSubType, <String>[
@@ -2348,9 +2394,12 @@ class _ServiceTypeScreenState extends State<ServiceTypeScreen> {
       jobSheet: jobSheet.trim(),
       tourClaim: tourClaim.trim(),
       subjects: subjectCtrl.text.trim(),
-      tourStartDate:
-          tourStartDate == null ? null : _formatDateTimeForApi(tourStartDate!),
-      tourEndDate: tourEndDate == null ? null : _formatDateTimeForApi(tourEndDate!),
+      tourStartDate: tourStartDate == null
+          ? null
+          : _formatDateTimeForApi(tourStartDate!),
+      tourEndDate: tourEndDate == null
+          ? null
+          : _formatDateTimeForApi(tourEndDate!),
       tourLocation: tourLocationCtrl.text.trim(),
       repairAssesmentType: _valueOrEmpty(repairAssessment, <String>['Select']),
       projectCode: _projectCodeFromSelection(selectedProject),

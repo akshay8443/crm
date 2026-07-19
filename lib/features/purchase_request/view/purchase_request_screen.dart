@@ -33,7 +33,16 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
 
   final ImagePicker _imagePicker = ImagePicker();
   final List<_PurchaseItem> items = [_PurchaseItem()];
+
+
+
+  // Existing: locally selected attachments (upload mode)
   final List<XFile> _attachments = [];
+
+  // Server attachments (view mode)
+  final List<_PurchaseRequestAttachment> _serverAttachments = [];
+
+
 
   final _requesterNameController = TextEditingController(text: 'Manu');
   final _ownerNameController = TextEditingController();
@@ -75,6 +84,8 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     return initialDocNo.isNotEmpty;
   }
 
+  bool get _canShowSubmitButton => !_isViewDetailsMode && !UserSession.isReadOnly;
+
   List<String> _withNoneOption(List<String> options) {
     final normalized = options
         .where((option) => option.trim().isNotEmpty)
@@ -101,9 +112,11 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     if (initialDocNo.isNotEmpty) {
       _docNoController.text = initialDocNo;
       _fetchPurchaseRequestDetails(initialDocNo);
+      _fetchPurchaseRequestAttachments(initialDocNo);
     } else {
       _fetchNextPurchaseRequestNo();
     }
+
     _applyInitialHeaderData(widget.initialHeaderData);
     _fetchPurchaseEmployees();
     _fetchPurchaseItems();
@@ -670,8 +683,69 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
     }
   }
 
+  Future<void> _fetchPurchaseRequestAttachments(String docNo) async {
+    final normalizedDocNo = docNo.trim();
+    if (normalizedDocNo.isEmpty) return;
+
+    try {
+      final uri = Uri.parse(
+        '${ApiConstants.baseUrl}/api/GetPurchaseRequestAttachments?DocNo=$normalizedDocNo',
+      );
+
+      final response = await http
+          .get(uri, headers: _getHeaders())
+          .timeout(const Duration(seconds: 25));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'Get purchase request attachments failed (${response.statusCode})',
+        );
+      }
+      if (response.body.isEmpty) {
+        if (!mounted) return;
+        setState(() => _serverAttachments.clear());
+        return;
+      }
+
+      final dynamic decoded = jsonDecode(response.body);
+      if (decoded is! List) {
+        throw Exception('Invalid attachments response format');
+      }
+
+      final attachments = <_PurchaseRequestAttachment>[];
+      for (final row in decoded) {
+        if (row is! Map<String, dynamic>) continue;
+        final id = int.tryParse(row['Id']?.toString() ?? '') ?? 0;
+        final filePath = row['FilePath']?.toString() ?? '';
+        if (filePath.isEmpty) continue;
+
+        attachments.add(
+          _PurchaseRequestAttachment(
+            id: id,
+            docNo: row['DocNo']?.toString() ?? normalizedDocNo,
+            fileName: row['FileName']?.toString() ?? '',
+            filePath: filePath,
+            fileType: row['FileType']?.toString() ?? '',
+            createdDate: row['CreatedDate']?.toString() ?? '',
+          ),
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _serverAttachments
+          ..clear()
+          ..addAll(attachments);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _serverAttachments.clear());
+    }
+  }
+
   Future<void> _fetchPurchaseRequestDetails(String docNo) async {
     final normalizedDocNo = docNo.trim();
+
     if (normalizedDocNo.isEmpty) {
       return;
     }
@@ -1329,30 +1403,36 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
                     child: const Text('Cancel'),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Padding(
-                  padding: const EdgeInsets.only(right: 8, top: 10, bottom: 10),
-                  child: FilledButton(
-                    onPressed: _isSubmitting ? null : _validateAndSubmit,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E69F2),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                if (_canShowSubmitButton) ...[
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      right: 8,
+                      top: 10,
+                      bottom: 10,
                     ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text('Save & Submit'),
+                    child: FilledButton(
+                      onPressed: _isSubmitting ? null : _validateAndSubmit,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF1E69F2),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Save & Submit'),
+                    ),
                   ),
-                ),
+                ],
               ],
       ),
       body: SafeArea(
@@ -2252,6 +2332,72 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
   }
 
   Widget _buildAttachmentsCard() {
+    // In view mode: show server attachments (images)
+    if (_isViewDetailsMode && _serverAttachments.isNotEmpty) {
+      return _sectionCard(
+        title: 'Attachments',
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(minHeight: 130),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFBFCFE),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: const Color(0xFFC8CED9),
+              style: BorderStyle.solid,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Attachments',
+                  style: TextStyle(
+                    color: Color(0xFF6A7685),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${_serverAttachments.length} file(s)',
+                  style: const TextStyle(
+                    color: Color(0xFF2B3A4A),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 96,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _serverAttachments.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 10),
+                    itemBuilder: (context, index) {
+                      final att = _serverAttachments[index];
+                      return GestureDetector(
+                        onTap: () => _openServerAttachmentPreview(att),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: SizedBox(
+                            width: 96,
+                            height: 96,
+                            child: _serverImage(att.filePath),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Default: upload mode OR no server attachments
     return _sectionCard(
       title: 'Attachments',
       child: InkWell(
@@ -2294,7 +2440,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                if (_attachments.isNotEmpty) ...[
+                if (!_isViewDetailsMode && _attachments.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text(
                     '${_attachments.length} file(s) selected',
@@ -2332,27 +2478,25 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
                               Positioned(
                                 top: 4,
                                 right: 4,
-                                child: _isViewDetailsMode
-                                    ? const SizedBox.shrink()
-                                    : InkWell(
-                                        onTap: () {
-                                          setState(() {
-                                            _attachments.removeAt(index);
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(2),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.black54,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            Icons.close,
-                                            size: 14,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
+                                child: InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      _attachments.removeAt(index);
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.black54,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -2368,6 +2512,7 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       ),
     );
   }
+
 
   Future<void> _openAttachmentPreview(XFile file) async {
     await showDialog<void>(
@@ -2417,6 +2562,59 @@ class _PurchaseRequestScreenState extends State<PurchaseRequestScreen> {
       },
     );
   }
+
+  Widget _serverImage(String url) {
+    // NOTE: using Image.network directly.
+    // If your server requires auth headers for image, we need a custom fetch+Image.memory.
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      width: 96,
+      height: 96,
+      errorBuilder: (context, error, stackTrace) {
+        return const Center(child: Icon(Icons.broken_image_outlined));
+      },
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      },
+    );
+  }
+
+  Future<void> _openServerAttachmentPreview(
+    _PurchaseRequestAttachment attachment,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: SizedBox(
+              width: 420,
+              height: 420,
+              child: _serverImageWithFit(attachment.filePath, BoxFit.contain),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _serverImageWithFit(String url, BoxFit fit) {
+    return Image.network(
+      url,
+      fit: fit,
+      errorBuilder: (context, error, stackTrace) {
+        return const Center(child: Icon(Icons.broken_image_outlined));
+      },
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      },
+    );
+  }
+
 
   Widget _itemRow(int index, _PurchaseItem item, bool isMobile) {
     final rowTextStyle = TextStyle(
@@ -2912,7 +3110,26 @@ class _ServiceCallOption {
   }
 }
 
+class _PurchaseRequestAttachment {
+  const _PurchaseRequestAttachment({
+    required this.id,
+    required this.docNo,
+    required this.fileName,
+    required this.filePath,
+    required this.fileType,
+    required this.createdDate,
+  });
+
+  final int id;
+  final String docNo;
+  final String fileName;
+  final String filePath;
+  final String fileType;
+  final String createdDate;
+}
+
 class PurchaseRequestHeaderData {
+
   const PurchaseRequestHeaderData({
     this.docDate,
     this.requester,

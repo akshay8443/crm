@@ -36,7 +36,10 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (!mounted) return;
-      UserSession.setLoggedInEmail(emailController.text.trim());
+      UserSession.setLoginResponse(
+        result,
+        fallbackEmail: emailController.text.trim(),
+      );
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(result.message)));

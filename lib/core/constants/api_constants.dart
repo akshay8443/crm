@@ -79,7 +79,11 @@ class ApiConstants {
   static const String getSpecficServiceCallPath = '/api/GetSpecficserviceCall';
   static const String updateServiceCallStatusPath =
       '/api/updateservicecallstatus';
+  static const String updateServiceCallApprovalStatusPath =
+      '/api/updateservicecallApprovalstatus';
   static const String getAttachmentsPath = '/api/GetAttachments';
+  static const String getApDownPaymentAttachmentsPath =
+      '/api/GetAPDownPaymentAttachments';
   static const String uploadImagePath = '/api/UploadImage';
   static const String uploadPurchaseRequestFilePath =
       '/api/UploadPurchaseRequestFile';

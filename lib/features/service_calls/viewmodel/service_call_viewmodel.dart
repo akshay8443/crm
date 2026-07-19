@@ -226,7 +226,9 @@ class ServiceCallViewModel {
           .toList();
     }
 
-    throw Exception('Get problem sub type data failed (${response.statusCode})');
+    throw Exception(
+      'Get problem sub type data failed (${response.statusCode})',
+    );
   }
 
   Future<String> fetchNextServiceNo() async {
@@ -322,7 +324,9 @@ class ServiceCallViewModel {
       throw Exception('Invalid specific service call response format');
     }
 
-    throw Exception('Get specific service call failed (${response.statusCode})');
+    throw Exception(
+      'Get specific service call failed (${response.statusCode})',
+    );
   }
 
   Future<Map<String, dynamic>> updateServiceCallStatus({
@@ -411,6 +415,69 @@ class ServiceCallViewModel {
     );
   }
 
+  Future<Map<String, dynamic>> updateServiceCallApprovalStatus({
+    required String serviceNo,
+    required String approvalRequired,
+  }) async {
+    final normalizedServiceNo = serviceNo.trim();
+    final normalizedApproval = approvalRequired.trim();
+    if (normalizedServiceNo.isEmpty) {
+      throw Exception('ServiceNo is required for approval status update');
+    }
+    if (normalizedApproval.isEmpty) {
+      throw Exception('Approval required is required for update');
+    }
+
+    final uri = Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.updateServiceCallApprovalStatusPath}',
+    );
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'Authorization': ApiConstants.basicAuthorization,
+    };
+    final payload = <String, dynamic>{
+      'ServiceCallNo': normalizedServiceNo,
+      'Approvalrequired': normalizedApproval,
+    };
+
+    final response = await http
+        .post(uri, headers: headers, body: jsonEncode(payload))
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (response.body.trim().isEmpty) {
+        return <String, dynamic>{
+          'message': 'Approval status updated successfully',
+        };
+      }
+      final dynamic decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      return <String, dynamic>{'data': decoded};
+    }
+
+    String? message;
+    if (response.body.trim().isNotEmpty) {
+      try {
+        final dynamic decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) {
+          message = (decoded['message'] ?? decoded['error'] ?? '')
+              .toString()
+              .trim();
+        } else {
+          message = response.body.trim();
+        }
+      } catch (_) {
+        message = response.body.trim();
+      }
+    }
+
+    throw Exception(
+      message == null || message.isEmpty
+          ? 'Update approval status failed (${response.statusCode})'
+          : message,
+    );
+  }
+
   Future<List<Map<String, dynamic>>> fetchServiceAttachments(
     String serviceNo,
   ) async {
@@ -469,6 +536,7 @@ class ServiceCallViewModel {
       'serialNumber': request.serialNumber,
       'mfrSerialno': request.mfrSerialno,
       'currentStatus': request.currentStatus,
+      'Approvalrequired': request.approvalRequired,
       'priority': request.priority,
       'assignedTech': request.assignedTech,
       'serviceType': request.serviceType,
@@ -551,7 +619,9 @@ class ServiceCallViewModel {
       return <String, dynamic>{'message': 'No attachments selected'};
     }
 
-    final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.uploadImagePath}');
+    final uri = Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.uploadImagePath}',
+    );
     final preparedFiles = <Map<String, dynamic>>[];
     for (final file in files) {
       final resolvedName = file.name.trim().isNotEmpty
